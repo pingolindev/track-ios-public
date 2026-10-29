@@ -1,0 +1,4 @@
+module pingolin_mobileFFI {
+    header "pingolin_mobileFFI.h"
+    export *
+}

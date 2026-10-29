@@ -1,0 +1,947 @@
+{
+ "title": "The late-joiner question: the shared vector for the web, iOS and Android clients",
+ "source_of_rules": [
+  "Track for iOS: LateJoiner.ask()",
+  "Track for Android: LateJoiners.case(), questions() and closed()"
+ ],
+ "copy": {
+  "title": "Let {name} into {circle}?",
+  "ranOut": "Their invitation ran out before anyone's phone could hand the circle over.",
+  "invitedBy": "{inviter} invited them."
+ },
+ "answers": {
+  "letThemIn": "signs a kind-3 admission for the member's id and the keys the question was raised for (the receive-only keys recorded for them / the listed keys); via the waiting-changes path (K3) when this device is behind; an admission from any device closes the question everywhere",
+  "notNow": "kept against the invitation; never asked again for it (any case)"
+ },
+ "cases": [
+  {
+   "name": "V1 e-mail invitee, this account (the chain's owner) signed it",
+   "rule": "third case: asked of the signer when the signer is an owner or admin in the chain; no line when this account invited them",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-1",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": true,
+    "case": "emailInvitation",
+    "inviterLine": null,
+    "capped": false,
+    "lines": []
+   }
+  },
+  {
+   "name": "V2 e-mail invitee signed by a chain admin; this device is the chain's owner",
+   "rule": "who is asked: the signer's own devices when the signer is an owner or admin in the chain, nobody else",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-2",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000002",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "admin",
+    "signerName": "Pat",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": false
+   }
+  },
+  {
+   "name": "V2b the same, asked on the signing chain admin's own device",
+   "rule": "who is asked: the signer, a chain admin; no line (this account invited them)",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000002",
+    "myChainRole": "admin",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-2",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000002",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "admin",
+    "signerName": "Pat",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": true,
+    "case": "emailInvitation",
+    "inviterLine": null,
+    "capped": false,
+    "lines": []
+   }
+  },
+  {
+   "name": "V3 e-mail invitee signed by a server-only admin; this device is the chain's owner",
+   "rule": "signer not an owner or admin in the chain: the chain's owner is asked, the inviter named, and it counts in the cap",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-3",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000003",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "member",
+    "signerName": "Sam",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": true,
+    "case": "emailInvitation",
+    "inviterLine": "Sam",
+    "capped": true,
+    "lines": [
+     "Sam invited them."
+    ]
+   }
+  },
+  {
+   "name": "V4 the same, on a chain admin's device (not the owner)",
+   "rule": "only the chain's owner is asked when the signer isn't a chain owner or admin",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000002",
+    "myChainRole": "admin",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-3",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000003",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "member",
+    "signerName": "Sam",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": false
+   }
+  },
+  {
+   "name": "V5 ran out; this account (chain owner) signed it",
+   "rule": "first case, whoever signed it: the ran-out line; no inviter line for a chain owner's or admin's own",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": true,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": false,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-5",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "8b96aa7c-0000-4000-8000-000000000004",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": true,
+    "case": "ranOut",
+    "inviterLine": null,
+    "capped": false,
+    "lines": [
+     "Their invitation ran out before anyone's phone could hand the circle over."
+    ]
+   }
+  },
+  {
+   "name": "V6 ran out; signer not a chain admin; chain owner's device",
+   "rule": "first case with the inviter named; capped",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": true,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": false,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-6",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000003",
+     "person": "8b96aa7c-0000-4000-8000-000000000004",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "member",
+    "signerName": "Sam",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": true,
+    "case": "ranOut",
+    "inviterLine": "Sam",
+    "capped": true,
+    "lines": [
+     "Their invitation ran out before anyone's phone could hand the circle over.",
+     "Sam invited them."
+    ]
+   }
+  },
+  {
+   "name": "V7 signer not a chain admin, not expired; chain owner's device",
+   "rule": "second case: the inviter line alone; capped",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": true,
+     "emailInvitationWithoutSignedId": false,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-7",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000003",
+     "person": "8b96aa7c-0000-4000-8000-000000000004",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "member",
+    "signerName": "Sam",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": true,
+    "case": "inviterNotChainAdmin",
+    "inviterLine": "Sam",
+    "capped": true,
+    "lines": [
+     "Sam invited them."
+    ]
+   }
+  },
+  {
+   "name": "V8 E already lets them in",
+   "rule": "eligible: never asked",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": true,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-8",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": false
+   }
+  },
+  {
+   "name": "V9 ejected by an owner or admin, signer not a chain admin",
+   "rule": "an ejection by an owner or admin binds: never asked",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": true,
+     "emailInvitationWithoutSignedId": false,
+     "removedByOwnerOrAdmin": true
+    },
+    "invitation": {
+     "id": "st-9",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000003",
+     "person": "8b96aa7c-0000-4000-8000-000000000004",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "member",
+    "signerName": "Sam",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": false
+   }
+  },
+  {
+   "name": "V10 the ejection rule does not apply to a chain owner's own invitation of an ejected person (it ran out)",
+   "rule": "an owner's or admin's own new invitation counts; if it runs out, that inviter is asked",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": true,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": false,
+     "removedByOwnerOrAdmin": true
+    },
+    "invitation": {
+     "id": "st-10",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "8b96aa7c-0000-4000-8000-000000000004",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": true,
+    "case": "ranOut",
+    "inviterLine": null,
+    "capped": false,
+    "lines": [
+     "Their invitation ran out before anyone's phone could hand the circle over."
+    ]
+   }
+  },
+  {
+   "name": "V11 none of E's flags, not this account's pre-reset invitation",
+   "rule": "no case: not asked",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": false,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-11",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "8b96aa7c-0000-4000-8000-000000000004",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": false
+   }
+  },
+  {
+   "name": "V12 answered: the same statement id (another case)",
+   "rule": "once per invitation: same id, case-insensitive",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "ST-12",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [
+     {
+      "id": "st-12",
+      "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+      "person": "someone-else@example.test",
+      "issuedAt": 1802900000
+     }
+    ],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": false
+   }
+  },
+  {
+   "name": "V13 answered: same signer and address, issued 691,199 s apart",
+   "rule": "same invitation within 8 days (< 691,200 s)",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-13a",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [
+     {
+      "id": "st-13b",
+      "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+      "person": "QUINN@EXAMPLE.TEST",
+      "issuedAt": 1793591199
+     }
+    ],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": false
+   }
+  },
+  {
+   "name": "V14 answered: same signer and address, issued exactly 691,200 s apart",
+   "rule": "8 days or more apart is a new invitation",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-14a",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [
+     {
+      "id": "st-14b",
+      "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+      "person": "quinn@example.test",
+      "issuedAt": 1793591200
+     }
+    ],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": true,
+    "case": "emailInvitation",
+    "inviterLine": null,
+    "capped": false,
+    "lines": []
+   }
+  },
+  {
+   "name": "V15 pending about another member with the same invitation",
+   "rule": "one question per invitation, pending included",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-15",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [],
+    "pending": [
+     {
+      "id": "st-15",
+      "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+      "person": "quinn@example.test",
+      "issuedAt": 1792900000
+     }
+    ],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": false
+   }
+  },
+  {
+   "name": "V16 cap reached for a non-chain-admin signer",
+   "rule": "at most 3 capped questions pending per circle",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-16",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000003",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "member",
+    "signerName": "Sam",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 3
+   },
+   "expect": {
+    "ask": false
+   }
+  },
+  {
+   "name": "V17 cap reached, but the signer is this chain owner",
+   "rule": "a chain owner's or admin's own invitation has no cap",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-17",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 3
+   },
+   "expect": {
+    "ask": true,
+    "case": "emailInvitation",
+    "inviterLine": null,
+    "capped": false,
+    "lines": []
+   }
+  },
+  {
+   "name": "V18 inviter not on this device's member list",
+   "rule": "no new words for 'someone': no inviter line at all (decision D3)",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": true,
+     "emailInvitationWithoutSignedId": false,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-18",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000003",
+     "person": "8b96aa7c-0000-4000-8000-000000000004",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "member",
+    "signerName": null,
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": true,
+    "case": "inviterNotChainAdmin",
+    "inviterLine": null,
+    "capped": true,
+    "lines": []
+   }
+  },
+  {
+   "name": "V19 e-mail AND ran out (two statements)",
+   "rule": "case order (decision D1): ran out, then signer, then e-mail",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": true,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": true,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-19",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "quinn@example.test",
+     "issuedAt": 1792900000
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0
+   },
+   "expect": {
+    "ask": true,
+    "case": "ranOut",
+    "inviterLine": null,
+    "capped": false,
+    "lines": [
+     "Their invitation ran out before anyone's phone could hand the circle over."
+    ]
+   }
+  },
+  {
+   "name": "V20 own pre-reset invitation binding exactly the listed keys",
+   "rule": "an own pre-reset invitation binding the listed keys: asked of this account, no line",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": false,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-20",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "8b96aa7c-0000-4000-8000-000000000004",
+     "issuedAt": 1792900000,
+     "signedBeforeReset": true,
+     "boundKeys": {
+      "sharing": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "signing": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+     }
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0,
+    "listedKeys": {
+     "sharing": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "signing": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+   },
+   "expect": {
+    "ask": true,
+    "case": "ownInvitationBeforeReset",
+    "inviterLine": null,
+    "capped": false,
+    "lines": []
+   }
+  },
+  {
+   "name": "V21 own pre-reset invitation, but their keys changed since",
+   "rule": "their keys changed since: 'Is this really {name}?' decides instead",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "member": "8b96aa7c-0000-4000-8000-000000000004",
+    "standing": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": false,
+     "emailInvitationWithoutSignedId": false,
+     "removedByOwnerOrAdmin": false
+    },
+    "invitation": {
+     "id": "st-21",
+     "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+     "person": "8b96aa7c-0000-4000-8000-000000000004",
+     "issuedAt": 1792900000,
+     "signedBeforeReset": true,
+     "boundKeys": {
+      "sharing": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "signing": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+     }
+    },
+    "signerChainRole": "owner",
+    "signerName": "Pat",
+    "answered": [],
+    "pending": [],
+    "pendingCapped": 0,
+    "listedKeys": {
+     "sharing": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "signing": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+   },
+   "expect": {
+    "ask": false
+   }
+  }
+ ],
+ "batch": [
+  {
+   "name": "B1 which capped questions are asked when more than 3 qualify",
+   "rule": "decision D2: already-raised first, then oldest issuedAt; chain owners' and admins' own uncapped",
+   "input": {
+    "me": "0b5f5bf1-0000-4000-8000-000000000001",
+    "myChainRole": "owner",
+    "candidates": [
+     {
+      "member": "m1",
+      "invitation": {
+       "id": "b1",
+       "signer": "0b5f5bf1-0000-4000-8000-000000000003",
+       "person": "m1",
+       "issuedAt": 1792900050
+      },
+      "signerChainRole": "member",
+      "raised": false
+     },
+     {
+      "member": "m2",
+      "invitation": {
+       "id": "b2",
+       "signer": "0b5f5bf1-0000-4000-8000-000000000003",
+       "person": "m2",
+       "issuedAt": 1792900010
+      },
+      "signerChainRole": "member",
+      "raised": false
+     },
+     {
+      "member": "m3",
+      "invitation": {
+       "id": "b3",
+       "signer": "0b5f5bf1-0000-4000-8000-000000000003",
+       "person": "m3",
+       "issuedAt": 1792900040
+      },
+      "signerChainRole": "member",
+      "raised": true
+     },
+     {
+      "member": "m4",
+      "invitation": {
+       "id": "b4",
+       "signer": "0b5f5bf1-0000-4000-8000-000000000003",
+       "person": "m4",
+       "issuedAt": 1792900020
+      },
+      "signerChainRole": "member",
+      "raised": false
+     },
+     {
+      "member": "m5",
+      "invitation": {
+       "id": "b5",
+       "signer": "0b5f5bf1-0000-4000-8000-000000000003",
+       "person": "m5",
+       "issuedAt": 1792900030
+      },
+      "signerChainRole": "member",
+      "raised": true
+     },
+     {
+      "member": "m6",
+      "invitation": {
+       "id": "b6",
+       "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+       "person": "m6",
+       "issuedAt": 1792900060
+      },
+      "signerChainRole": "owner",
+      "raised": false
+     }
+    ],
+    "standingAll": {
+     "eligible": false,
+     "invitationExpired": false,
+     "signerNotChainAdmin": true,
+     "emailInvitationWithoutSignedId": false,
+     "removedByOwnerOrAdmin": false
+    },
+    "standingFor": {
+     "m6": {
+      "eligible": false,
+      "invitationExpired": true,
+      "signerNotChainAdmin": false,
+      "emailInvitationWithoutSignedId": false,
+      "removedByOwnerOrAdmin": false
+     }
+    }
+   },
+   "expect": {
+    "asked": [
+     "m6",
+     "m5",
+     "m3",
+     "m2"
+    ],
+    "orderSignificant": false,
+    "why": "m6 is this owner's own (uncapped); of the capped, already-raised first (m5 T0+30, m3 T0+40), then the oldest (m2 T0+10); m4 and m1 wait"
+   }
+  }
+ ],
+ "closing": [
+  {
+   "name": "C1 closing",
+   "rule": "a raised question closes when E lets the member in or they leave the list; its invitation stays answered",
+   "input": {
+    "raised": [
+     [
+      "m1",
+      {
+       "id": "c1",
+       "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+       "person": "m1",
+       "issuedAt": 1792900000
+      }
+     ],
+     [
+      "m2",
+      {
+       "id": "c2",
+       "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+       "person": "m2",
+       "issuedAt": 1792900000
+      }
+     ],
+     [
+      "m3",
+      {
+       "id": "c3",
+       "signer": "0b5f5bf1-0000-4000-8000-000000000001",
+       "person": "m3",
+       "issuedAt": 1792900000
+      }
+     ]
+    ],
+    "eligibility": [
+     {
+      "userId": "m1",
+      "eligible": true
+     },
+     {
+      "userId": "m2",
+      "eligible": false
+     }
+    ]
+   },
+   "expect": {
+    "closed": [
+     "c1",
+     "c3"
+    ]
+   }
+  }
+ ],
+ "decisions": {
+  "D1": "case order when several flags apply: ran out, then a signer who is not a chain admin, then e-mail (case V19)",
+  "D2": "which capped questions are kept past three: the ones already raised, then the oldest by issuedAt (batch B1)",
+  "D3": "no inviter line for an inviter who is not on this device's member list (case V18)"
+ }
+}

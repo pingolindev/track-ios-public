@@ -1,0 +1,256 @@
+name: Track
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  bundleIdPrefix: com.pingolin
+  developmentLanguage: en
+  xcodeVersion: "26.0"
+
+# Build configurations. ReleaseDev is a Release-optimised, App Store-signed
+# build whose hosts are compiled to the DEVELOPMENT environment, for
+# TestFlight builds against that environment. The choice is made at compile
+# time (SWIFT_ACTIVE_COMPILATION_CONDITIONS below), never at runtime, so the
+# "Release = production, no runtime env switch" posture holds. Plain Release
+# stays pinned to production.
+configs:
+  Debug: debug
+  Release: release
+  ReleaseDev: release
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    MARKETING_VERSION: "1.0.1"
+    # Repo-local marker only. A release upload takes its build number from
+    # App Store Connect (the highest it holds, plus one, passed to the build
+    # as BUILD_NUMBER), so expect the number on TestFlight to be far ahead
+    # of this one.
+    CURRENT_PROJECT_VERSION: "13"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: NO
+  configs:
+    ReleaseDev:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: RELEASE_DEV
+
+packages:
+  PingolinTrackSDK:
+    path: .
+  Sodium:
+    url: https://github.com/jedisct1/swift-sodium
+    revision: cfd195c76882aa9b997560ca7cb95d72fbf5db00
+  # MapLibre Native iOS — pmtiles:// scheme is supported natively
+  # (maplibre-native#2882). Used in place of MapKit to match Android's
+  # rendering of the Protomaps Basemaps style hosted on Cloudflare R2.
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution
+    revision: be0696007ca8b350faa0e5968c0d6397d59db415
+
+targets:
+  Track:
+    type: application
+    platform: iOS
+    sources:
+      # App/Resources, under this path, holds the bundled legal documents,
+      # rendered from the website's pages by a script (never transcribed by
+      # hand) and shown offline in Settings. Refresh them whenever the
+      # policy's version line changes.
+      - path: App
+        excludes:
+          - "Info.plist"
+      # Third-party notices, shown offline under Settings → About → Open Source
+      # Licenses: this app's own dependencies, and the Rust crates linked into
+      # the SDK framework (build-ios.sh copies the SDK's inventory next to the
+      # bindings, so it changes whenever they do). Listed as sources with a
+      # resources build phase: XcodeGen has no target-level `resources:` key and
+      # ignores it.
+      - path: THIRD_PARTY_LICENSES.md
+        buildPhase: resources
+      - path: Sources/PingolinTrackSDK/THIRD_PARTY_LICENSES-mobile-sdk.md
+        buildPhase: resources
+      # The app's privacy manifest, copied to the root of Track.app. Listed
+      # the same way as the notices above, for the same reason.
+      - path: PrivacyInfo.xcprivacy
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pingolin.track
+        PRODUCT_NAME: Track
+        # iPhone only. Track has no iPad interface — no size classes, no split
+        # view, no idiom branches — and has never been built or tested on one, so
+        # claiming iPad support would put a stretched phone layout in front of App
+        # Review (a 2.1 rejection) and require a 13" screenshot set. The audience
+        # lost is small: UIRequiredDeviceCapabilities already demands `gps`, which
+        # every Wi-Fi-only iPad fails.
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_FILE: App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+        SWIFT_STRICT_CONCURRENCY: minimal
+      configs:
+        # Dev/Debug uses development APNs + sandbox App Attest so a
+        # build pinned to the development hosts keeps working
+        # without registering production capabilities.
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Track.entitlements
+        # TestFlight + App Store builds need production APNs +
+        # production App Attest. Track.Release.entitlements differs
+        # only in those two strings; the rest matches Track.entitlements.
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Track.Release.entitlements
+        # Distribution-signed like Release (production APNs + App Attest
+        # entitlements are what the App Store profile carries); only the
+        # compiled-in hosts differ. See the project-level `configs:` note.
+        ReleaseDev:
+          CODE_SIGN_ENTITLEMENTS: Track.Release.entitlements
+    dependencies:
+      - target: NotificationExtension
+      - package: PingolinTrackSDK
+        product: PingolinTrackSDK
+      - package: Sodium
+      - package: MapLibre
+
+  # Rewrites server-sent APNs alerts before iOS shows them (adds the short
+  # date + time to place and destination alerts), and on a "New Circle Member"
+  # alert hands the circle to whoever this device owes it. Runs only because
+  # the server sets mutable-content whenever the push carries data.
+  NotificationExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: NotificationExtension
+        excludes:
+          - "Info.plist"
+          - "PrivacyInfo.xcprivacy"
+      # Shared with the app on purpose: one implementation of the invite
+      # banner's words and of which pending invite a push is about, so the
+      # extension's rewrite and the app's own local notification never differ.
+      - path: App/Notifications/InviteNotificationCopy.swift
+      # The background handover decides with the APP'S rules, compiled from the
+      # app's own files — never a second copy: who is confirmed, who is owed
+      # the circle by this device, the send-side gate, the approval record it
+      # reads (and never writes), and the rows it decides on.
+      - path: App/Managers/MembershipConfirmation.swift
+      - path: App/Managers/ApprovalRecord.swift
+      - path: App/Managers/AccessHandover.swift
+      - path: App/Services/CircleWireModels.swift
+      - path: App/Notifications/MemberJoinedCopy.swift
+      - path: App/Notifications/ExtensionBridgeKeys.swift
+      - path: App/Services/AppGroupLock.swift
+      # An account's id in its one form, compared the app's way.
+      - path: App/Services/CanonicalId.swift
+      # The late joiner's question is one of the reasons in the approval
+      # record's file (`KeyDeliveryRequest.Reason`); pure, never asked here.
+      - path: App/Managers/LateJoiner.swift
+      # An SOS push is checked here before it rings, with the APP'S
+      # receiver rules and marks, and shown in the app's words.
+      - path: App/Managers/SOSReceiverRules.swift
+      - path: App/Managers/SOSAlarmMarks.swift
+      - path: App/Notifications/SOSAlarmCopy.swift
+      - path: App/Services/StoredFile.swift
+      # Its sessions refuse the leaked emSign keys as the app's do: one list.
+      - path: App/Services/TrustBlocklist.swift
+      # A check-in's or a crossing's banner is named in the app's words, the
+      # ones its inbox uses (`NamedBanner`).
+      - path: App/Notifications/NamedNotificationCopy.swift
+      # The extension's own privacy manifest, at the root of the .appex: its
+      # code reads the app group's UserDefaults, and the SDK it links reads
+      # file metadata. Listed explicitly (and excluded from the folder above)
+      # so it is a resource whatever XcodeGen's default for the type.
+      - path: NotificationExtension/PrivacyInfo.xcprivacy
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pingolin.track.NotificationExtension
+        PRODUCT_NAME: NotificationExtension
+        INFOPLIST_FILE: NotificationExtension/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.9"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        SKIP_INSTALL: YES
+        # Shared keychain group so the extension can read the circle keys the
+        # SDK persisted and open the sealed crossing time. See
+        # NotificationExtension.entitlements for why no migration is needed.
+        CODE_SIGN_ENTITLEMENTS: NotificationExtension.entitlements
+    dependencies:
+      # Needed to DECRYPT the sealed crossing time. Reusing the SDK rather than
+      # reimplementing XChaCha20-Poly1305 + the v2 AAD derivation in the
+      # extension: a second implementation of the AAD would drift silently, and
+      # this path is best-effort, so a drift would show up as notifications
+      # quietly reverting to the dispatch time rather than as a failure.
+      - package: PingolinTrackSDK
+        product: PingolinTrackSDK
+
+  TrackTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests/TrackTests
+      # The extension's source is compiled into the test bundle as well as into
+      # the .appex. An app-extension target cannot be @testable-imported, and the
+      # timestamp handling is exactly the part worth pinning — see
+      # NotificationStampTests for the nanosecond-precision case it guards.
+      - path: NotificationExtension/NotificationService.swift
+      # NotificationService references ExtensionKeyStorage (it opens the
+      # sealed crossing time), so the test bundle needs it too or the target
+      # fails to compile with "cannot find 'ExtensionKeyStorage' in scope" —
+      # while the app build still succeeds, because there the .appex compiles
+      # the whole directory.
+      - path: NotificationExtension/ExtensionKeyStorage.swift
+      # NotificationService also hands circle invites to InviteBannerRewriter,
+      # which composes the banner through InviteNotificationCopy. Both are
+      # compiled in here directly for the same reason as the two files above.
+      # InviteNotificationCopy is ALSO in the app module; the copy compiled
+      # into this bundle shadows the @testable-imported one, so the tests and
+      # the extension's own code read the same file.
+      - path: NotificationExtension/InviteBannerRewriter.swift
+      - path: App/Notifications/InviteNotificationCopy.swift
+      # ...and a member_joined banner to BackgroundHandover. The shared
+      # rules it runs are NOT compiled in here: the tests reach them through
+      # the app module, so both sides use the one copy of each type.
+      - path: NotificationExtension/BackgroundHandover.swift
+      - path: NotificationExtension/ExtensionSessionRefresh.swift
+      # ...and an SOS to its check, the same way.
+      - path: NotificationExtension/SOSCheck.swift
+      # ...and a check-in or a crossing to its names, the same way.
+      - path: NotificationExtension/NamedBanner.swift
+    settings:
+      base:
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Track.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Track"
+        # The extension's files compiled in above import the app module only
+        # here (`#if TRACK_TESTS`), where it exists.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) TRACK_TESTS"
+    dependencies:
+      - target: Track
+      - package: PingolinTrackSDK
+        product: PingolinTrackSDK
+
+  TrackUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - Tests/TrackUITests
+    settings:
+      base:
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Track
+    dependencies:
+      - target: Track
+
+  # NEVER SHIPPED — nothing depends on it and no release build includes it.
+  # A stand-in for the notification extension's PROCESS when checking by
+  # hand: a simulator gets no APNs delivery and `simctl push` skips the
+  # service extension, so this runs the extension's own code —
+  # BackgroundHandover with its live environment — in a process that is not
+  # the app, with the extension's entitlements (the app's keychain group
+  # and app group), while Track is terminated. Launched with
+  # `simctl launch --console-pty … --push-id <id>`.

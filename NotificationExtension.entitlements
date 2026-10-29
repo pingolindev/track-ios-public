@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for the Notification Service Extension.
+
+  It declares the SAME keychain access group as the app so it can read the
+  circle keys the SDK persisted, and nothing else. That is the minimum needed
+  to open the sealed crossing time in `encrypted_occurred_at` and stamp the
+  banner with when the event actually happened, instead of `sent_at` (the
+  dispatch time, which is wrong by however long the reporting device was
+  offline).
+
+  KeychainKeyStorageCallback does not set an explicit
+  kSecAttrAccessGroup, so its items live in the app's default group —
+  the first entry of the app's keychain-access-groups, i.e. exactly the group
+  named below. Declaring it here lets a second process read those same items.
+
+  The items are stored kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly, so
+  this works on a LOCKED device after the first unlock since boot — which is
+  the case that matters, because a place-alert banner usually arrives with the
+  phone in a pocket. Before first unlock the read fails and the stamp falls
+  back to sent_at.
+-->
+<plist version="1.0">
+<dict>
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$(AppIdentifierPrefix)com.pingolin.track</string>
+    </array>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.pingolin.track</string>
+    </array>
+</dict>
+</plist>
