@@ -1,0 +1,471 @@
+{
+  "title": "Owed role changes in a circle with records: when a record is due, what it names, what it settles: the shared vector for the web, iOS and Android clients",
+  "source_of_rules": [
+    "a role changes only in a record signed by the chain's OWNER; every other record carries every role over, and a newcomer comes in as 'member'",
+    "the owner's device writes the role changes its person made, and rotates right after a promotion or demotion",
+    "the SDK: only the chain's owner sets a role; for anyone else it is carried over, and a newcomer comes in as a member",
+    "A lost promotion fails safe; a lost demotion fails unsafe"
+  ],
+  "model": {
+    "scope": "a circle in recorded mode (web rotationMode 'recorded', iOS .recorded, Android circleHasRefreshRecords); legacy and wait owe no role changes",
+    "myChainRole": "this device's account's role in the chain (chainRole(me)); null = not counted",
+    "owed": "this person's own role changes not settled yet, by member id (the ledger's and, on web, the page's), as read when the record is planned",
+    "members[].listed": "on the complete roster read now",
+    "members[].hasKeys": "listed with both keys (web roster hasKeys; Android in the plan's wrap)",
+    "members[].eligible": "E_include's yes now (refreshEligibility(..., include))",
+    "members[].chainRole": "the chain's role for them; null = the chain never named them or no longer counts them",
+    "ledgerAtTake": "the owed changes when the server takes the record (defaults to owed): a change made while the record was on its way",
+    "ids": "compared in canonical form (lower case); every id under expect is canonical"
+  },
+  "functions": {
+    "due": "the role part of 'a record is owed now' (web/Android roleChangesDue, iOS recordedRotationDue .recorded): true iff myChainRole is 'owner' and some owed (member, role) EITHER has the chain counting the member with another role, OR has the chain never naming them, role 'admin', and the member listed, hasKeys and eligible",
+    "plan": "the shared rotation plan (web rotationPlan, Android RecordedRotation.rotation, iOS RecordedRotation.rotationPlan), for each member in the case: 'included' (hasKeys and eligible), 'pending' (counted, not includable) or 'absent' (neither), with the owed role only on the chain owner's device (null = carried over / a newcomer's 'member')",
+    "settles": "what leaves the owed changes when the server takes the record built now: an owed (member, role) leaves only if ledgerAtTake still holds that SAME role, and then if this device isn't the chain's owner, the member isn't listed, or the plan named the member with that role. Everything else stays owed",
+    "owedAfter": "ledgerAtTake minus settles"
+  },
+  "cases": [
+    {
+      "name": "R1 promotion of a member the chain counts",
+      "rule": "a role the chain doesn't show, for a member it counts: due; the record names them admin; settled when taken",
+      "input": {
+        "me": "0b5f5bf1-0000-4000-8000-000000000001",
+        "myChainRole": "owner",
+        "owed": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        },
+        "members": [
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000004",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": true,
+            "chainRole": "member"
+          }
+        ]
+      },
+      "expect": {
+        "due": true,
+        "plan": {
+          "8b96aa7c-0000-4000-8000-000000000004": {
+            "state": "included",
+            "role": "admin"
+          }
+        },
+        "settles": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        },
+        "owedAfter": {}
+      }
+    },
+    {
+      "name": "R2 promotion of a member the chain never named (they joined after the last record)",
+      "rule": "never named, listed with keys, and E_include's yes now (the promotion's own admission gives E (b)): due at once, as iOS does; the record names them included with 'admin'",
+      "input": {
+        "me": "0b5f5bf1-0000-4000-8000-000000000001",
+        "myChainRole": "owner",
+        "owed": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        },
+        "members": [
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000004",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": true,
+            "chainRole": null
+          }
+        ]
+      },
+      "expect": {
+        "due": true,
+        "plan": {
+          "8b96aa7c-0000-4000-8000-000000000004": {
+            "state": "included",
+            "role": "admin"
+          }
+        },
+        "settles": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        },
+        "owedAfter": {}
+      },
+      "today": {
+        "web": "due false (circles.ts roleChangesDue: now !== undefined)",
+        "android": "due false (CircleRepository.kt roleChangesDue: it != null)",
+        "ios": "passes"
+      }
+    },
+    {
+      "name": "R3 promotion of a never-named member E_include doesn't allow now",
+      "rule": "no record could name them (not counted, not includable), so nothing is due and nothing loops; the change stays owed and is due once they are includable (R2)",
+      "input": {
+        "me": "0b5f5bf1-0000-4000-8000-000000000001",
+        "myChainRole": "owner",
+        "owed": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        },
+        "members": [
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000004",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": false,
+            "chainRole": null
+          }
+        ]
+      },
+      "expect": {
+        "due": false,
+        "plan": {
+          "8b96aa7c-0000-4000-8000-000000000004": {
+            "state": "absent",
+            "role": null
+          }
+        },
+        "settles": {},
+        "owedAfter": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        }
+      },
+      "today": {
+        "ios": "due true (any owed change), and the change is dropped after the record (settles every key)"
+      }
+    },
+    {
+      "name": "R4 demotion of an admin the chain counts",
+      "rule": "due; the record names them 'member'; settled when taken",
+      "input": {
+        "me": "0b5f5bf1-0000-4000-8000-000000000001",
+        "myChainRole": "owner",
+        "owed": {
+          "8b96aa7c-0000-4000-8000-000000000004": "member"
+        },
+        "members": [
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000004",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": true,
+            "chainRole": "admin"
+          }
+        ]
+      },
+      "expect": {
+        "due": true,
+        "plan": {
+          "8b96aa7c-0000-4000-8000-000000000004": {
+            "state": "included",
+            "role": "member"
+          }
+        },
+        "settles": {
+          "8b96aa7c-0000-4000-8000-000000000004": "member"
+        },
+        "owedAfter": {}
+      }
+    },
+    {
+      "name": "R5 demotion of a never-named member who is includable",
+      "rule": "the chain already treats a newcomer as a member (as in the SDK), so nothing is due; a record built for another reason names them 'member' and settles it",
+      "input": {
+        "me": "0b5f5bf1-0000-4000-8000-000000000001",
+        "myChainRole": "owner",
+        "owed": {
+          "8b96aa7c-0000-4000-8000-000000000004": "member"
+        },
+        "members": [
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000004",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": true,
+            "chainRole": null
+          }
+        ]
+      },
+      "expect": {
+        "due": false,
+        "plan": {
+          "8b96aa7c-0000-4000-8000-000000000004": {
+            "state": "included",
+            "role": "member"
+          }
+        },
+        "settles": {
+          "8b96aa7c-0000-4000-8000-000000000004": "member"
+        },
+        "owedAfter": {}
+      },
+      "today": {
+        "ios": "due true (any owed change)"
+      }
+    },
+    {
+      "name": "R5b demotion of a never-named member who isn't includable",
+      "rule": "NOT settled at once: a record naming them admin may still land (this device's own in flight, or the owner's other device's); the demotion stays owed, not due, and is written once a record names them (R6b)",
+      "input": {
+        "me": "0b5f5bf1-0000-4000-8000-000000000001",
+        "myChainRole": "owner",
+        "owed": {
+          "8b96aa7c-0000-4000-8000-000000000004": "member"
+        },
+        "members": [
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000004",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": false,
+            "chainRole": null
+          }
+        ]
+      },
+      "expect": {
+        "due": false,
+        "plan": {
+          "8b96aa7c-0000-4000-8000-000000000004": {
+            "state": "absent",
+            "role": null
+          }
+        },
+        "settles": {},
+        "owedAfter": {
+          "8b96aa7c-0000-4000-8000-000000000004": "member"
+        }
+      },
+      "today": {
+        "ios": "due true, and the demotion is dropped after the record"
+      }
+    },
+    {
+      "name": "R6 a demotion made while the promotion's record was on its way",
+      "rule": "settle by member AND role: the record wrote 'admin' but the ledger holds 'member' when the server takes it, so nothing settles (a lost demotion fails unsafe)",
+      "input": {
+        "me": "0b5f5bf1-0000-4000-8000-000000000001",
+        "myChainRole": "owner",
+        "owed": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        },
+        "members": [
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000004",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": true,
+            "chainRole": "member"
+          }
+        ],
+        "ledgerAtTake": {
+          "8b96aa7c-0000-4000-8000-000000000004": "member"
+        }
+      },
+      "expect": {
+        "due": true,
+        "plan": {
+          "8b96aa7c-0000-4000-8000-000000000004": {
+            "state": "included",
+            "role": "admin"
+          }
+        },
+        "settles": {},
+        "owedAfter": {
+          "8b96aa7c-0000-4000-8000-000000000004": "member"
+        }
+      },
+      "today": {
+        "web": "settles q (refreshLedger.ts settleRoleChanges, by id)",
+        "android": "settles q (OwnerRoleChanges.settled, filterKeys)",
+        "ios": "settles q (recordedChangeTaken, removeValue(forKey:))"
+      }
+    },
+    {
+      "name": "R6b the next sweep after R6, once the record is imported",
+      "rule": "the chain shows 'admin', the ledger 'member': due; the next record names them 'member'",
+      "input": {
+        "me": "0b5f5bf1-0000-4000-8000-000000000001",
+        "myChainRole": "owner",
+        "owed": {
+          "8b96aa7c-0000-4000-8000-000000000004": "member"
+        },
+        "members": [
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000004",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": true,
+            "chainRole": "admin"
+          }
+        ]
+      },
+      "expect": {
+        "due": true,
+        "plan": {
+          "8b96aa7c-0000-4000-8000-000000000004": {
+            "state": "included",
+            "role": "member"
+          }
+        },
+        "settles": {
+          "8b96aa7c-0000-4000-8000-000000000004": "member"
+        },
+        "owedAfter": {}
+      }
+    },
+    {
+      "name": "R7 promotion of a counted member who isn't includable now (keys changed without their yes)",
+      "rule": "counted, so named pending with the new role; due; settled when taken",
+      "input": {
+        "me": "0b5f5bf1-0000-4000-8000-000000000001",
+        "myChainRole": "owner",
+        "owed": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        },
+        "members": [
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000004",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": false,
+            "chainRole": "member"
+          }
+        ]
+      },
+      "expect": {
+        "due": true,
+        "plan": {
+          "8b96aa7c-0000-4000-8000-000000000004": {
+            "state": "pending",
+            "role": "admin"
+          }
+        },
+        "settles": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        },
+        "owedAfter": {}
+      }
+    },
+    {
+      "name": "R8 a chain admin's device holds an owed promotion (e.g. made before it handed the circle over)",
+      "rule": "only the chain's owner writes roles: never due here, no role in its records, and its next record settles the change (it never can be written from here)",
+      "input": {
+        "me": "0b5f5bf1-0000-4000-8000-000000000001",
+        "myChainRole": "admin",
+        "owed": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        },
+        "members": [
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000004",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": true,
+            "chainRole": "member"
+          }
+        ]
+      },
+      "expect": {
+        "due": false,
+        "plan": {
+          "8b96aa7c-0000-4000-8000-000000000004": {
+            "state": "included",
+            "role": null
+          }
+        },
+        "settles": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        },
+        "owedAfter": {}
+      },
+      "today": {
+        "ios": "due true (removesInTheChain counts an admin): one rotation that writes no role"
+      }
+    },
+    {
+      "name": "R9 two owed changes, one due",
+      "rule": "a change no record can carry yet neither blocks nor rides on another member's record: R1's member settles, R3's stays owed",
+      "input": {
+        "me": "0b5f5bf1-0000-4000-8000-000000000001",
+        "myChainRole": "owner",
+        "owed": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin",
+          "8b96aa7c-0000-4000-8000-000000000005": "admin"
+        },
+        "members": [
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000004",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": true,
+            "chainRole": "member"
+          },
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000005",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": false,
+            "chainRole": null
+          }
+        ]
+      },
+      "expect": {
+        "due": true,
+        "plan": {
+          "8b96aa7c-0000-4000-8000-000000000004": {
+            "state": "included",
+            "role": "admin"
+          },
+          "8b96aa7c-0000-4000-8000-000000000005": {
+            "state": "absent",
+            "role": null
+          }
+        },
+        "settles": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        },
+        "owedAfter": {
+          "8b96aa7c-0000-4000-8000-000000000005": "admin"
+        }
+      },
+      "today": {
+        "ios": "drops R's promotion after the record"
+      }
+    },
+    {
+      "name": "R10 the owed entry spelled in upper case",
+      "rule": "ids are compared in canonical form: the same as R2",
+      "input": {
+        "me": "0b5f5bf1-0000-4000-8000-000000000001",
+        "myChainRole": "owner",
+        "owed": {
+          "8B96AA7C-0000-4000-8000-000000000004": "admin"
+        },
+        "members": [
+          {
+            "userId": "8b96aa7c-0000-4000-8000-000000000004",
+            "listed": true,
+            "hasKeys": true,
+            "eligible": true,
+            "chainRole": null
+          }
+        ]
+      },
+      "expect": {
+        "due": true,
+        "plan": {
+          "8b96aa7c-0000-4000-8000-000000000004": {
+            "state": "included",
+            "role": "admin"
+          }
+        },
+        "settles": {
+          "8b96aa7c-0000-4000-8000-000000000004": "admin"
+        },
+        "owedAfter": {}
+      },
+      "today": {
+        "web": "due false (as R2)",
+        "android": "due false (as R2)",
+        "ios": "passes"
+      }
+    }
+  ]
+}
