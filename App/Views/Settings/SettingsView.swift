@@ -66,8 +66,6 @@ struct SettingsView: View {
     // someone is moving less than 100 m / min.
     @AppStorage("location.intervalSec") private var locationIntervalSec: Int = 60
     @AppStorage("location.distanceMeters") private var locationDistanceMeters: Int = 100
-    @AppStorage("location.batchUploads") private var locationBatchUploads: Bool = false
-    @AppStorage("diagnostics.crashReporting") private var crashReportingEnabled: Bool = false
     @AppStorage("app.privacy.blockScreenshots") private var blockScreenshots = ScreenshotBlocker.defaultEnabled
     /// Mirrors the Android app's `SessionManager.useServerGeocoder` —
     /// flipping this both in Settings and on the Geocoding sub-screen
@@ -110,7 +108,6 @@ struct SettingsView: View {
                 // inactivity switch here: both kinds of alert are
                 // governed in the circle's permissions, as on
                 // Android.
-                diagnosticsSection
                 activitySection
                 privacySection
                 aboutSection
@@ -1205,19 +1202,6 @@ struct SettingsView: View {
                 }
             }
 
-            Toggle(isOn: $locationBatchUploads) {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Batch Uploads")
-                        Text("Queue locations and sync periodically")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: "arrow.up.arrow.down")
-                }
-            }
-
             Toggle(isOn: $settings.batterySaverEnabled) {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
@@ -1258,14 +1242,6 @@ struct SettingsView: View {
         }
         .onChange(of: locationDistanceMeters) { _, _ in
             locationService.applyTrackingSettingsChange()
-        }
-    }
-
-    private var diagnosticsSection: some View {
-        Section("Diagnostics") {
-            Toggle(isOn: $crashReportingEnabled) {
-                Label("Crash Reporting", systemImage: "ladybug.fill")
-            }
         }
     }
 

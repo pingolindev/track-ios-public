@@ -672,6 +672,36 @@ final class PollProfileTests: XCTestCase {
             "each knob must reach LocationService.applyTrackingSettingsChange")
     }
 
+    func testTheDeadBatchUploadsSwitchIsGone() throws {
+        let src = try source("App/Views/Settings/SettingsView.swift")
+        XCTAssertTrue(src.contains("Text(\"Battery Saver\")"), "the switch that works must stay")
+        XCTAssertFalse(src.contains("Batch Uploads"), "nothing queues locations: the switch promised what no code did")
+        XCTAssertFalse(src.contains("location.batchUploads"), "a key no code reads, back on the screen")
+    }
+
+    func testTheDeadCrashReportingSwitchIsGone() throws {
+        let src = try source("App/Views/Settings/SettingsView.swift")
+        XCTAssertTrue(src.contains("activitySection"), "the sections around it must stay")
+        XCTAssertFalse(src.contains("Crash Reporting"), "iOS has no crash reporter: the switch promised one")
+        XCTAssertFalse(src.contains("diagnostics.crashReporting"), "a key no code reads, back on the screen")
+        XCTAssertFalse(src.contains("Section(\"Diagnostics\")"), "it held that one switch, so it would stand empty")
+    }
+
+    func testTheRetiredSwitchesPreferencesAreCleared() throws {
+        let suite = "retired-switches-\(UUID().uuidString)"
+        let store = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { store.removePersistentDomain(forName: suite) }
+        store.set(true, forKey: "location.batchUploads")
+        store.set(true, forKey: "diagnostics.crashReporting")
+        store.set(true, forKey: "battery_saver_enabled")
+
+        let settings = UserSettings(defaults: store)
+
+        XCTAssertNil(store.object(forKey: "location.batchUploads"))
+        XCTAssertNil(store.object(forKey: "diagnostics.crashReporting"))
+        XCTAssertTrue(settings.batterySaverEnabled, "the switch that works keeps its state")
+    }
+
     private func source(_ relative: String) throws -> String {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
