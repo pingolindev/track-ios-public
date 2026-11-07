@@ -310,7 +310,11 @@ final class UserSettings: ObservableObject {
         static let biometricEnabled = "biometric_enabled"
         static let lastActiveTime = "last_active_time"
         static let batterySaverEnabled = "battery_saver_enabled"
-        static let batterySaverInterval = "battery_saver_interval"
+        /// The keys of the retired Batch Uploads and Crash Reporting switches,
+        /// which nothing ever read. Cleared on start so a device that turned one
+        /// on does not carry a dead preference around for some later feature to
+        /// inherit.
+        static let retiredSwitches = ["location.batchUploads", "diagnostics.crashReporting"]
         static let autoGeocodingEnabled = "auto_geocoding_enabled"
         static let theme = "theme"
         static let dateFormat = "date_format"
@@ -344,6 +348,7 @@ final class UserSettings: ObservableObject {
         self.defaults = defaults
         _requireAuthOnLaunch = Published(initialValue: defaults.bool(forKey: Keys.requireAuthOnLaunch))
         _autoLockTimeout = Published(initialValue: defaults.object(forKey: Keys.autoLockTimeout) as? Int ?? 300)
+        for key in Keys.retiredSwitches { defaults.removeObject(forKey: key) }
     }
 
     // Persisted computed properties
@@ -388,14 +393,6 @@ final class UserSettings: ObservableObject {
             defaults.set(newValue, forKey: Keys.batterySaverEnabled)
             objectWillChange.send()
         }
-    }
-
-    var batterySaverInterval: TimeInterval {
-        get {
-            let value = defaults.double(forKey: Keys.batterySaverInterval)
-            return value > 0 ? value : 900 // Default 15 minutes
-        }
-        set { defaults.set(newValue, forKey: Keys.batterySaverInterval) }
     }
 
     var autoGeocodingEnabled: Bool {
