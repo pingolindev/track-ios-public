@@ -22,7 +22,7 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
-    MARKETING_VERSION: "1.0.3"
+    MARKETING_VERSION: "1.0.4"
     # Repo-local marker only. A release upload takes its build number from
     # App Store Connect (the highest it holds, plus one, passed to the build
     # as BUILD_NUMBER), so expect the number on TestFlight to be far ahead
