@@ -1161,10 +1161,11 @@ struct APIError: Codable, LocalizedError {
     }
 
     /// True ONLY when the server has definitively rejected the session: a 401
-    /// from `/auth/refresh`, surfaced as code `refresh_failed`. That endpoint
-    /// resolves the session by refresh-token hash and ignores the JWT
-    /// signature, so a 401 there means revoked / expired / replayed — never
-    /// transient.
+    /// from `/auth/refresh` with auth's JSON body, surfaced as code
+    /// `refresh_failed`. That endpoint resolves the session by refresh-token
+    /// hash and ignores the JWT signature, so its JSON 401 means revoked /
+    /// expired / replayed — never transient. A 401 there that isn't JSON (an
+    /// edge's or a proxy's page) is `http_401`, and keeps the session.
     ///
     /// Everything else (5xx / 429 / circuit-open / network / timeout / decode)
     /// MUST NOT trigger logout: doing so wipes the refresh token and, with no

@@ -73,6 +73,23 @@ actor APIService {
         self.encoder = Self.makeWireEncoder()
     }
 
+    #if DEBUG
+    /// A client on the session a test gives (a URLProtocol stub), so a test
+    /// drives `execute`'s real paths. Debug builds only; the app uses `shared`.
+    init(session: URLSession) {
+        self.session = session
+        self.decoder = Self.makeWireDecoder()
+        self.encoder = Self.makeWireEncoder()
+    }
+    #endif
+
+    /// Whether an answer says it is JSON (`Content-Type: application/json`,
+    /// with or without parameters, in any case): what tells auth's own refusal
+    /// of a refresh from an edge's or a proxy's page.
+    nonisolated static func saysJSON(_ response: HTTPURLResponse) -> Bool {
+        (response.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased().contains("application/json")
+    }
+
     /// The configuration the API session is built from. Static so a test can
     /// check it.
     ///
@@ -2414,6 +2431,15 @@ actor APIService {
                     // those behind the same message.
                     let serverReason = body.isEmpty ? "(no body)" : body
                     print("[Track] /auth/refresh \(httpResponse.statusCode): \(serverReason)")
+                    // Only auth's own refusal ends the session, and auth
+                    // answers it in JSON (`{"success":false,"error":…}`).
+                    // A 401 that isn't JSON (an HTML page from Cloudflare or
+                    // a proxy) says nothing about the session: it fails like
+                    // any other answer without auth's envelope, `http_401`,
+                    // which keeps the session (`isSessionDefinitivelyExpired`).
+                    guard Self.saysJSON(httpResponse) else {
+                        throw APIError(code: "http_401", message: "Refresh answered without auth's JSON")
+                    }
                     throw APIError(
                         code: "refresh_failed",
                         message: "Refresh token rejected: \(serverReason)"
@@ -2725,11 +2751,12 @@ actor APIService {
             response = try await self.refreshToken(refreshToken: refreshToken)
         } catch {
             lastRefreshFailure = (error, Date())
-            // A 401 from /auth/refresh is the ONE definitive "this session
-            // is gone" signal — the endpoint resolves the session by
-            // refresh-token hash and ignores the JWT signature, so 401
-            // means revoked / expired / replayed, never transient.
-            // execute() surfaces it as APIError code "refresh_failed".
+            // A 401 from /auth/refresh with auth's JSON body is the ONE
+            // definitive "this session is gone" signal — the endpoint
+            // resolves the session by refresh-token hash and ignores the JWT
+            // signature, so that 401 means revoked / expired / replayed,
+            // never transient. execute() surfaces it as APIError code
+            // "refresh_failed" (a 401 that isn't JSON, as "http_401").
             //
             // AuthManager checks this on the LAUNCH path
             // (checkExistingSession), but a session revoked while the app
