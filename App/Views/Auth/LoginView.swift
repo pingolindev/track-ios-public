@@ -222,7 +222,7 @@ struct LoginView: View {
     /// inconsistent with the rest of the app's copy. We map the
     /// common cases explicitly.
     static let verifyEmailFirstText =
-        "Please verify your email address first. Open the link we sent you, then sign in again."
+        "Verify your email address first. Open the link we sent you, then sign in again."
 
     static func friendlyMessage(for error: Error) -> String {
         // The password was right and the keys still would not open: say that,

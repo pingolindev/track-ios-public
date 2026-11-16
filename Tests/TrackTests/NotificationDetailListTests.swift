@@ -86,7 +86,7 @@ final class NotificationDetailListTests: XCTestCase {
         XCTAssertTrue(try source("App/Views/Notifications/NotificationsView.swift").contains(
             "if manager.notifications.isEmpty || manager.personalizedAt != NotificationsManager.detailNow {"))
         let settings = try source("App/Views/Settings/SettingsView.swift")
-        XCTAssertTrue(settings.contains("The app's notification list follows this setting too; at Generic it keeps the standard wording."))
+        XCTAssertTrue(settings.contains("The app's notification list follows this setting too. At Generic it keeps the standard wording."))
         XCTAssertFalse(settings.contains("always shows full detail"))
     }
 }

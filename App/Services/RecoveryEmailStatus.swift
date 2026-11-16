@@ -94,7 +94,7 @@ enum RecoveryEmailStatus: Equatable {
         case .unknown:
             return "Couldn't check your recovery address. Open your account settings to see it."
         case .notSet:
-            return "Without one, losing access to your primary email means losing the account. Add one now — it can't be added once you're locked out."
+            return "Without one, losing access to your primary email means losing the account. Add one now: it can't be added once you're locked out."
         case .pendingVerification(let address):
             return "\(address) hasn't been confirmed yet, so it can't receive a reset link. Open the link we emailed to that address."
         case .verified(let address):
@@ -124,9 +124,8 @@ enum RecoveryCopy {
     /// someone their notes and location history are coming back when they
     /// are not.
     static let scope = """
-        A recovery address gets you back into your account. It does not unlock \
-        your encrypted data — that needs your recovery key. Set up both while \
-        you still can: neither can be added once you're locked out.
+        A second address that can receive a password-reset link. It restores \
+        account access only: your data still needs your recovery key.
         """
 
     /// Why the app hands this to the browser instead of doing it here.

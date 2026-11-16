@@ -97,10 +97,10 @@ final class RecoveryEmailStatusTests: XCTestCase {
     /// copy implying otherwise would have someone reset their password
     /// expecting their location history to come back with it.
     func testScopeCopyDoesNotPromiseDataRecovery() {
-        XCTAssertTrue(RecoveryCopy.scope.contains("recovery key"),
+        XCTAssertTrue(RecoveryCopy.scope.contains("your data still needs your recovery key"),
                       "Must point at the recovery key as what unlocks data")
-        XCTAssertTrue(RecoveryCopy.scope.lowercased().contains("does not unlock"),
-                      "Must say plainly that a recovery address does not unlock data")
+        XCTAssertTrue(RecoveryCopy.scope.lowercased().contains("account access only"),
+                      "Must say plainly that a recovery address gets the account back and nothing more")
     }
 
     // MARK: - Decoding the /auth/me fields

@@ -127,7 +127,7 @@ final class LockedCircleTests: XCTestCase {
         XCTAssertEqual(copy.title, "Waiting for your circle")
         // What happens now: this phone asks by itself and the members
         // are asked with a notification, not "will be asked".
-        XCTAssertEqual(copy.explanation, "You reset your password, so another member of Family has been asked to confirm it's you. It opens here as soon as one of them does. If you still have your recovery key, you can restore your previous setup instead: Account → Settings → Data from before your password reset.")
+        XCTAssertEqual(copy.explanation, "You reset your password, so a member of Family has been asked to confirm it's you. It opens here once they do. If you still have your recovery key, you can restore access in your account settings instead.")
         XCTAssertFalse(copy.asksForPassword)
         XCTAssertEqual(CircleLockReason.sealedBeforeReset.copy(isOwner: true, circleName: "Family", device: "phone"), copy,
                        "the reset case reads the same for an owner")
@@ -149,7 +149,7 @@ final class LockedCircleTests: XCTestCase {
         let copy = CircleLockReason.keysNotUnlocked.copy(isOwner: false, circleName: "Family", device: "phone")
         XCTAssertEqual(copy.title, "Enter your password")
         XCTAssertEqual(copy.caption, "Enter your password to open your circles")
-        XCTAssertEqual(copy.explanation, "This phone needs your password to open your circles. Nothing has been lost.")
+        XCTAssertEqual(copy.explanation, "This phone needs your password to open your circles.")
         XCTAssertTrue(copy.asksForPassword)
         XCTAssertFalse(copy.opensAccountSettings)
         for reason in allReasons where reason != .keysNotUnlocked {

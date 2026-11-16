@@ -366,8 +366,8 @@ final class HandOverTests: XCTestCase {
         XCTAssertEqual(MemberRow.handOverQuestion(name: "Ava", circle: "Family", number: nil),
                        "Ava will have full control of Family: they can delete it or hand it on. "
                        + "You'll stay in it as a member. This can't be undone.")
-        XCTAssertEqual(MemberRow.handOverQuestion(name: "Ava", circle: "Family", number: "12345 67890", device: "iPhone"),
-                       "Ava was invited by email, so this iPhone can't tell on its own that the account is really theirs. "
+        XCTAssertEqual(MemberRow.handOverQuestion(name: "Ava", circle: "Family", number: "12345 67890"),
+                       "Ava was invited to this circle by email. "
                        + "If you're not sure it's them, check with Ava another way first. Their number: 12345 67890. "
                        + "Ava will have full control of Family: they can delete it or hand it on. "
                        + "You'll stay in it as a member. This can't be undone.")

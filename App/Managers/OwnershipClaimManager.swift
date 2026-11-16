@@ -197,8 +197,7 @@ enum OwnershipClaimCopy {
             return "You already own this circle."
         case "http_403":
             // The server requires an admin and answers "Insufficient permissions".
-            return "Only an admin can ask to take over a circle — somebody the owner "
-                + "already trusted to remove members. "
+            return "Only an admin of this circle can ask to take it over. "
                 + "Ask another admin, or ask the owner to make you one."
         case "http_404":
             // Deliberately vague on the server's side: "Circle not found or
@@ -219,14 +218,14 @@ enum OwnershipClaimCopy {
             // owner, so "the circle is still yours" is a fact here, not a
             // reassurance, and it is the thing the person actually wants to
             // know after tapping Refuse and seeing an error.
-            return "There's no longer a request to take over this circle — it may have been "
-                + "withdrawn, or you may have refused it already. The circle is still yours."
+            return "There's no longer a request to take over this circle: it may have been "
+                + "withdrawn or already refused. The circle is still yours."
         case "http_403":
             // Ownership is checked inside the UPDATE, so this means the circle
             // is not theirs at the moment they tapped.
             // Re-read straight after this error too (`refuse()`).
             return "Only the circle's owner can refuse this request. If the circle was yours, "
-                + "ownership may have already changed. This screen now shows where it stands."
+                + "ownership may have already changed."
         default:
             return api.plainLine
         }
@@ -394,8 +393,9 @@ struct OwnershipClaimPresentation: Equatable {
     /// The sentence the whole feature exists for. It has to say four things:
     /// what is being taken, by whom, when, and what refusing does. It also has
     /// to say what ownership actually IS, because most owners have never had to
-    /// think about it, and the answer ("delete it, hand it on, decide who is an
-    /// admin") is the only way to judge whether losing it matters.
+    /// think about it, and the answer ("delete the circle, hand it on, choose
+    /// its admins") is the only way to judge whether losing it matters. The
+    /// web's words.
     private static func ownerMessage(
         who: String?,
         deadlineText: String?,
@@ -405,17 +405,16 @@ struct OwnershipClaimPresentation: Equatable {
     ) -> String {
         let asker = who.map { "\($0), an admin in this circle," } ?? "An admin in this circle"
         var s = "\(asker) has asked to become its owner. "
-        s += "Owning a circle is what lets you delete it, hand it to somebody else, "
-        s += "and decide who is an admin.\n\n"
+        s += "The owner can delete the circle, hand it on, and choose its admins.\n\n"
         if let deadlineText, let deadline {
             let days = daysRemaining(until: deadline, from: now, calendar: calendar)
             let left: String
             switch days {
-            case 0: left = "today"
-            case 1: left = "tomorrow"
+            case 0: left = "which is today"
+            case 1: left = "which is tomorrow"
             default: left = "in \(days) days"
             }
-            s += "If you do nothing, ownership passes to them on \(deadlineText) — \(left). "
+            s += "If you do nothing, ownership passes to them on \(deadlineText), \(left). "
         } else {
             s += "If you do nothing, ownership passes to them when the request runs out. "
         }
@@ -425,10 +424,9 @@ struct OwnershipClaimPresentation: Equatable {
         // ("they are unreachable, not untrusted"). Getting this wrong overstates
         // the loss, and overstating it on a fourteen-day deadline is the wrong
         // direction to be wrong in.
-        s += "You would stay an admin, so you could still remove members — but deleting "
-        s += "the circle and handing it on would no longer be yours to do.\n\n"
-        s += "Refusing keeps the circle yours and ends this request permanently. "
-        s += "Nobody leaves the circle either way, and nothing changes about what anyone can see."
+        s += "You would stay an admin.\n\n"
+        s += "Refusing keeps the circle yours and ends this request. "
+        s += "Nobody leaves the circle either way."
         return s
     }
 

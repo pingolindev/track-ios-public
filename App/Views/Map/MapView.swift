@@ -74,7 +74,7 @@ struct MapView: View {
     /// A toast's words held back while a sheet closes (`showSendToast`), said
     /// once it has gone (`announceHeldToast`).
     @State private var heldToastAnnouncement: String?
-    /// Debounced gate for the "couldn't reach server" pill. A single
+    /// Debounced gate for the "couldn't reach Pingolin" pill. A single
     /// failed poll sets lastLocationRefreshFailedAt immediately, but
     /// app-resume often drops + re-establishes the connection within a
     /// second, flashing the alarming red pill. Only flip this true after
@@ -502,7 +502,7 @@ struct MapView: View {
             }
 
             // Refresh-status pill: "Updating…" while a location fetch is in
-            // flight, "Couldn't reach server" after a network failure. Hidden
+            // flight, "Couldn't reach Pingolin" after a network failure. Hidden
             // when steady so success isn't celebrated; absence of the pill IS
             // the success signal. Mirrors the Android app's cardRefreshStatus
             // so cached markers don't look authoritative on a spotty
@@ -696,7 +696,10 @@ struct MapView: View {
             .alert(handoverDue ? "This account is yours now" : "This account was set up by a guardian", isPresented: $showGuardianDetail) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text((handoverDue ? "The day your guardian named as the handover has passed, so this account is yours now. They cannot hand it over themselves and we will not do it silently - write to help@support.pingolin.com and we will walk you through taking it over, including the recovery key and any passkey that would otherwise keep working.\n\n" : "") + "Whoever set this account up knows its password, and the password is what decrypts your data - so they can see where you are now, everywhere you have been for as long as this circle keeps history, and they can set alerts telling them when you arrive somewhere or leave.\n\nNothing tells you when they look. There is no notification, no record you can read, and no way for us to show you one - checking a map leaves no trace.\n\nWhen you turn 18 the account becomes yours and their responsibility for it ends. Changing the password alone does not remove their access, because a recovery key or a passkey they registered keeps working. Section 6 of the Terms has the steps.\n\nIf asking them is not safe, do not ask. You can write to abuse@mail.pingolin.com instead - a minor may report an account held by a guardian, and so may an adult about one a guardian set up for them.")
+                // The web's words (guardian.handoverDetail, then detailWhat,
+                // detailNoSignal, detailEighteen and detailReport), in ONE Text:
+                // an alert's message shows only its first view.
+                Text((handoverDue ? "The handover day your guardian set has passed, so this account is yours now. Write to help@support.pingolin.com and we'll help you take it over.\n\n" : "") + "Whoever set this account up knows its password. They can see where you are now and where you have been, for as long as this circle keeps history, and can set alerts for when you arrive somewhere or leave.\n\nYou aren't told when they look, and there's no record of it.\n\nWhen you turn 18 the account becomes yours. Changing the password alone doesn't remove their access. Section 6 of the Terms has the steps.\n\nIf asking them isn't safe, don't. You can write to abuse@mail.pingolin.com instead.")
             }
             .alert("Premium feature", isPresented: $showingDestinationPremiumNotice) {
                 Button("OK", role: .cancel) {}
@@ -1551,7 +1554,7 @@ struct MapView: View {
             case .whenInUse:
                 return (
                     "Background tracking is off",
-                    "Track only updates while the app is open. Enable Always so your circles see your location during drives, walks, and stops.",
+                    "Track only updates while the app is open. Enable Always so your circles see your location when it's closed.",
                     // iOS shows the Always prompt at most once. After that this
                     // tap deep-links to Settings, and onboarding already spends
                     // the one prompt for every user who finishes it, so the
@@ -1574,7 +1577,7 @@ struct MapView: View {
             case .reducedAccuracy:
                 return (
                     "Your circle can't see you",
-                    "Precise Location is off, so iOS only tells Track roughly which area you are in — too coarse to put you on the map.",
+                    "Precise Location is off, so iOS only tells Track roughly which area you are in, which is too coarse to put you on the map.",
                     // Same two-pronged handler, so the same honesty about the
                     // label: once declined, iOS suppresses the prompt and this
                     // is a trip to Settings.
@@ -1794,7 +1797,7 @@ struct MapView: View {
                     .foregroundStyle(.orange)
                 // The words in the label colour, as "Updating…" is: orange text
                 // measured 2.15:1 in light. The triangle keeps the warning colour.
-                Text("Couldn't reach server — showing last known")
+                Text("Couldn't reach Pingolin: showing last known")
                     .font(.footnote)
                     .foregroundStyle(.primary)
             }
@@ -2648,7 +2651,7 @@ struct CreatePlaceFromMapSheet: View {
                             TabSelectionState.shared.selected = 1
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Join or create a circle to enable boundaries — alerts need somewhere to fire.")
+                                Text("Join or create a circle to set place alerts.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 Text("Create a circle →")

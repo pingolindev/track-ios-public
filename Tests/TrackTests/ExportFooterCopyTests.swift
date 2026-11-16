@@ -71,16 +71,17 @@ final class ExportFooterCopyTests: XCTestCase {
         )
     }
 
-    /// The parts that must stay true whatever the wording: the seal is
-    /// real, and losing the passphrase is final. This is the only warning the
-    /// user gets before choosing an unrecoverable secret.
+    /// The parts that must stay true whatever the wording: only the
+    /// passphrase opens the file, and losing it is final. This is the only
+    /// warning the user gets before choosing an unrecoverable secret.
     func testItKeepsTheUnrecoverableWarning() {
         XCTAssertTrue(
-            notice.localizedCaseInsensitiveContains("cannot recover"),
+            notice.localizedCaseInsensitiveContains("can't be recovered")
+                || notice.localizedCaseInsensitiveContains("cannot be recovered"),
             "the passphrase is unrecoverable and that must keep being said; got: \(notice)"
         )
         XCTAssertTrue(
-            notice.localizedCaseInsensitiveContains("sealed"),
+            notice.localizedCaseInsensitiveContains("only that passphrase opens"),
             "got: \(notice)"
         )
     }

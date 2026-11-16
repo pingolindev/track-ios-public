@@ -17,8 +17,8 @@
 
 import SwiftUI
 
-/// How a raw public key is shown to someone who has been told to compare it
-/// "character for character" with another device.
+/// How a raw public key is shown to someone who may compare it, character for
+/// character, with another device.
 ///
 /// WHY THIS EXISTS
 ///   A 64-character hex string has no spaces, so SwiftUI's line breaker treats
@@ -31,8 +31,8 @@ import SwiftUI
 ///   Grouping solves this where a line-break tweak would not: a space is a
 ///   break opportunity, so the layout never needs to hyphenate at all, and
 ///   short groups are what makes two 64-character strings actually comparable
-///   by eye. The app already uses this idiom for safety numbers ("twelve
-///   groups of digits"). `MyKeysView.copyAll` deliberately copies the
+///   by eye. The app already uses this idiom for safety numbers (twelve
+///   groups of digits). `MyKeysView.copyAll` deliberately copies the
 ///   UNGROUPED value, so pasting it into anything else still yields the real
 ///   key.
 enum PublicKeyDisplay {
@@ -64,10 +64,9 @@ enum PublicKeyDisplay {
 
 /// A public key rendered for comparison: grouped, monospaced, selectable.
 ///
-/// Both screens that show these keys use this view, because the copy on
-/// Settings → Security details promises the member's Security details shows "exactly
-/// what you see here". Two renderers would make that sentence false the first
-/// time one of them changed.
+/// Both screens that show these keys use this view: Settings → Security
+/// details and a member's Security details show the same values, and two
+/// renderers would let them drift apart the first time one of them changed.
 struct PublicKeyText: View {
     let value: String?
     var font: Font.TextStyle = .footnote

@@ -45,8 +45,9 @@ struct MemberDetailView: View {
         circleManager.members[circleId]?.first { $0.userId == userId }
     }
 
+    /// Starts the one line under the code, so its stand-in is capitalised.
     private var memberName: String {
-        member?.displayName.isEmpty == false ? member!.displayName : "this member"
+        member?.displayName.isEmpty == false ? member!.displayName : "This member"
     }
 
     var body: some View {
@@ -82,7 +83,9 @@ struct MemberDetailView: View {
                         .font(.headline)
 
                     if let safetyNumber = safetyNumber {
-                        Text("Compare these 60 digits with \(memberName) in person, or on a call you placed yourself. They should open Security details for you on their phone (Circles → the circle → your ⋯ button); the twelve groups will be the same on both phones.")
+                        // One line, and nothing about comparing: whoever
+                        // wants to check a code knows what to do with it.
+                        Text("\(memberName) sees the same security code for you.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
 
@@ -153,7 +156,7 @@ struct MemberDetailView: View {
     @ViewBuilder
     private var verifiedToggle: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Toggle("Verified out of band", isOn: Binding(
+            Toggle("Mark verified", isOn: Binding(
                 get: { verifiedAt != nil },
                 set: { isOn in
                     if isOn {
@@ -176,20 +179,17 @@ struct MemberDetailView: View {
     }
 
     private var verifiedSubtitle: String {
-        guard let verifiedAt = verifiedAt else { return "Not yet verified out of band" }
+        guard let verifiedAt = verifiedAt else { return "Not verified" }
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return "Verified \(formatter.string(from: verifiedAt))"
     }
 
-    /// The peer's raw published keys. These are the values the OTHER person can
-    /// read back on their own device under Settings → Security & Devices →
-    /// Security details: the same lowercase hex on both screens, because both
-    /// render the same bytes. Naming that
-    /// destination is the whole point of the section: the safety number is
-    /// pairwise and has no counterpart on the Encryption screen, so without this
-    /// there is nothing on either screen a user can line up by eye.
+    /// The peer's raw published keys: the values the OTHER person reads back on
+    /// their own device under Settings → Security & Devices → Security details,
+    /// the same lowercase hex on both screens. The labels and the values, with
+    /// no text above them.
     @ViewBuilder
     private func technicalDetails(_ keys: (sharing: String, signing: String)) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -203,10 +203,6 @@ struct MemberDetailView: View {
             .buttonStyle(.borderless)
 
             if showDetails {
-                Text("\(memberName)'s technical details. On their own phone these appear under Settings → Security & Devices → Security details, character for character.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
                 keyRow("Encryption ID (X25519)", value: keys.sharing)
                 keyRow("Signature ID (Ed25519)", value: keys.signing)
                 keyRow("User ID", value: userId)
@@ -220,8 +216,8 @@ struct MemberDetailView: View {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            // Same renderer as Security details (Settings), because the copy on
-            // that screen promises this one shows "exactly what you see here".
+            // Same renderer as Security details (Settings): the two screens
+            // show the same values, so they are drawn the same way.
             PublicKeyText(value: value, font: .caption)
         }
         .padding(.top, 8)
@@ -255,7 +251,7 @@ struct MemberDetailView: View {
         }
 
         guard let keys = keys else {
-            error = "The security code isn't available yet — \(memberName)'s account isn't fully set up."
+            error = "Their security code isn't available yet."
             return
         }
 

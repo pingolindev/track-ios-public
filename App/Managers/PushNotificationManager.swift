@@ -1089,9 +1089,9 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
                 )
                 #endif
                 if let circleId {
-                    // surfaceFailures: false (see loadMemberLocations). This runs
+                    // surfaceFailures: false; see loadMemberLocations. This runs
                     // off-screen for a circle the PAYLOAD names, so a failure here
-                    // must not leave "Couldn't reach server" sitting on the user's
+                    // must not leave "Couldn't reach Pingolin" sitting on the user's
                     // map: a push carrying an unknown circle id would paint the
                     // pill, and it would stay until a later refresh cleared it.
                     try? await CircleManager.shared.loadMemberLocations(

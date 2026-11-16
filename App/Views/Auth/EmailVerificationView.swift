@@ -51,7 +51,7 @@ struct EmailVerificationView: View {
                     .font(.system(size: 28, weight: .bold))
                     .multilineTextAlignment(.center)
 
-                Text("We've sent a verification link to your email address. Please check your inbox and click the link to verify your account.")
+                Text("We've sent a verification link to your email address. Check your inbox and tap the link to verify your account.")
                     .font(.system(size: 16))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)

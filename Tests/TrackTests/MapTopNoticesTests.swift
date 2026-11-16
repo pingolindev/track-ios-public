@@ -21,7 +21,7 @@ import XCTest
 /// The map's notices in ONE column under the top controls. Notices at fixed
 /// offsets of their own overlap when two show together: a guardian line drawn
 /// last would cover the toast ("This circle isn't on this device any more."),
-/// the "Couldn't reach server" pill and the permission banner. In one stack
+/// the "Couldn't reach Pingolin" pill and the permission banner. In one stack
 /// nothing covers anything, and the guardian line, first, is never pushed off.
 final class MapTopNoticesTests: XCTestCase {
 
@@ -156,7 +156,7 @@ final class MapTopNoticesTests: XCTestCase {
         let pill = try body(map, from: "    private func refreshPill(state: RefreshPillState) -> some View {\n",
                             to: "    /// Anchor decides which side the label sits on:")
         XCTAssertTrue(pill.contains("""
-                        Text("Couldn't reach server — showing last known")
+                        Text("Couldn't reach Pingolin: showing last known")
                             .font(.footnote)
                             .foregroundStyle(.primary)
         """))

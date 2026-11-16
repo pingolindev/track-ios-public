@@ -343,7 +343,7 @@ struct SharePlaceSheet: View {
                 }
                 if circleManager.circles.isEmpty {
                     Section {
-                        Text("Join or create a circle first — places are shared with a circle.")
+                        Text("Join or create a circle first. Places are shared with a circle.")
                             .foregroundStyle(.secondary)
                     }
                 } else {

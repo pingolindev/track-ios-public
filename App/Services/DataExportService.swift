@@ -60,8 +60,8 @@ actor DataExportService {
 
         var errorDescription: String? {
             switch self {
-            case .incomplete(let pages):
-                return "Export incomplete: stopped after \(pages) pages while the server still reported more data. Try a shorter date range."
+            case .incomplete:
+                return "The export couldn't be completed. Try a shorter date range."
             case .noData:
                 return "Export returned no data."
             }

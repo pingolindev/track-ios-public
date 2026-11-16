@@ -513,8 +513,7 @@ final class RegistrationGateTests: XCTestCase {
     func testTheWords() throws {
         XCTAssertEqual(RegistrationGateCopy.underReviewTitle, "Your account is under review")
         XCTAssertEqual(RegistrationGateCopy.underReviewBody,
-                       "Your account request is checked by an admin before access is granted. "
-                       + "We'll email you the moment it's approved — then Track unlocks automatically.")
+                       "An admin checks each account request. We'll email you when yours is approved.")
         XCTAssertEqual(RegistrationGateCopy.notApprovedTitle, "Your application wasn't approved")
         XCTAssertEqual(RegistrationGateCopy.notApprovedBody,
                        "This account can't be used with Track. We delete it, and your application, 30 days after the decision.")

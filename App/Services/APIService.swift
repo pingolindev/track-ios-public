@@ -2534,7 +2534,7 @@ actor APIService {
                     // `code == "http_404"` carve-out in the app would
                     // be dead code. CircleManager's matters most: a
                     // deleted circle is handled quietly, not with
-                    // "Couldn't reach server, showing last known"
+                    // "Couldn't reach Pingolin: showing last known"
                     // over the map.
                     //
                     // Only the generic label is replaced; a

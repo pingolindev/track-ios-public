@@ -148,7 +148,7 @@ final class ErrorBanner: ObservableObject {
         post(Self.signedOutText, kind: .error)
     }
 
-    static let signedOutText = "Your session expired. Please sign in again."
+    static let signedOutText = "You have been signed out. Please sign in again."
 
     func dismiss() {
         dismissTask?.cancel()

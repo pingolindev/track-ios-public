@@ -80,7 +80,7 @@ final class CircleManager: ObservableObject {
     /// Non-nil after a failed `loadMemberLocations` attempt that looked
     /// like a connectivity issue (anything except a clean "circle gone"
     /// 404). Cleared on the next successful fetch. The Map's pill turns
-    /// into "Couldn't reach server, showing last known" while this is
+    /// into "Couldn't reach Pingolin: showing last known" while this is
     /// set.
     @Published private(set) var lastLocationRefreshFailedAt: Date?
     /// Each circle's whole roster as the server sent it, confirmed or not. Every
@@ -4968,7 +4968,7 @@ final class CircleManager: ObservableObject {
     }
 
     /// - Parameter surfaceFailures: whether a failure here may raise the map's
-    ///   "Couldn't reach server, showing last known" pill. True for refreshes the
+    ///   "Couldn't reach Pingolin: showing last known" pill. True for refreshes the
     ///   user is watching; FALSE for background ones, which they are not.
     ///
     ///   A push-driven wake runs with the app off-screen, on whatever signal the
@@ -5018,8 +5018,8 @@ final class CircleManager: ObservableObject {
             Self.diag("locations-fetch", "circle=\(circleId) FETCH_THREW: \(error)")
             #endif
             // Flag the network failure so the map pill renders
-            // "Couldn't reach server, showing last known". Skip the
-            // flag on clean 404s: those mean the circle is genuinely
+            // "Couldn't reach Pingolin: showing last known". Skip the
+            // flag on clean 404s, those mean the circle is genuinely
             // gone, not a connectivity issue. Mirrors the Android app's
             // CircleNotFoundException carve-out.
             if surfaceFailures, Self.isCircleNotFound(error) == false {
@@ -7013,7 +7013,7 @@ final class CircleManager: ObservableObject {
         // pinned could sign a wrap for the new version and win the lost-race
         // replacement of our unconfirmed key.
         guard let retained = pinsRetainedAt[circle.id], retained >= planStartedAt else {
-            throw CircleError.ejectFailed("Couldn't refresh this circle's member list — try again")
+            throw CircleError.ejectFailed("Couldn't refresh this circle's member list. Try again.")
         }
         // The member being removed is on the roster until the eject lands; they
         // are neither wrapped nor pending, so they are not part of the plan.

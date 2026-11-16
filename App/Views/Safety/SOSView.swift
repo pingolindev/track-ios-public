@@ -80,7 +80,7 @@ struct SOSView: View {
                         }
                         .disabled(sosManager.raiseIsOff)
 
-                        Text("Tap to notify the active members of this circle and show them where you are — you'll confirm before it sends")
+                        Text("Tap to notify the active members of this circle and show them where you are. You'll confirm before it sends.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -298,7 +298,7 @@ enum SOSDeliveryCopy {
         case "confirmed":
             head = "All \(d.recipients) confirmed their device received it."
         case "partial":
-            head = "\(d.confirmed) of \(d.recipients) confirmed their device received it. The rest have not yet — a phone that is off or has no signal cannot confirm."
+            head = "\(d.confirmed) of \(d.recipients) confirmed their device received it. The rest have not yet. A phone that is off or has no signal cannot confirm."
         case "no_confirmation":
             head = "Nobody's device has confirmed yet. We sent it, but we cannot tell whether it arrived. If this matters right now, reach someone another way."
         case "undeliverable":
@@ -312,7 +312,7 @@ enum SOSDeliveryCopy {
             parts.append("We also emailed \(d.emailed).")
         }
         if d.confirmed > 0 {
-            parts.append("Confirmed means the notification reached their device — not that anyone has read it or is on their way.")
+            parts.append("Confirmed means the notification reached their device. It doesn't mean anyone has read it or is on their way.")
         }
         return parts.joined(separator: "\n\n")
     }
@@ -551,7 +551,7 @@ struct ActiveSOSCard: View {
 
     nonisolated static func closeFailure(_ error: Error) -> String {
         // An APIError describes itself in the app's words, never the server's.
-        "Still active — couldn't update your circle. \(error.plainText)"
+        "Still active: couldn't update your circle. \(error.plainText)"
     }
 }
 

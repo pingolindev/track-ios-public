@@ -64,7 +64,7 @@ struct SOSEdgeIndicatorOverlay: View {
                 .position(position)
                 .contentShape(SwiftUI.Circle())
                 .onTapGesture { onTap(indicator.sosId) }
-                .accessibilityLabel("Active circle notification off screen — tap to show")
+                .accessibilityLabel("Active circle notification off screen. Tap to show.")
             }
         }
         .allowsHitTesting(!indicators.isEmpty)

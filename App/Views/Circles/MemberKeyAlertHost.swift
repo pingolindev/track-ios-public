@@ -67,7 +67,7 @@ struct MemberKeyAlertHost: ViewModifier {
                 Button("OK", role: .cancel) { approvalFailure = nil }
             } message: { failure in
                 // ONE Text: SwiftUI shows only the first view of an alert message.
-                Text("\(failure.reason)\n\nNothing was changed. Pingolin will ask again about \(failure.displayName) the next time the member list refreshes.")
+                Text("\(failure.reason)\n\nNothing was changed. Pingolin will ask again about \(failure.displayName).")
             }
     }
 

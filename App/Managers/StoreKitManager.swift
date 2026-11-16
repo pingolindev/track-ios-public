@@ -315,7 +315,7 @@ final class StoreKitManager: ObservableObject {
                 // launch and `restore()` will try again.
                 print("[Track] Could not report an App Store transaction (\(source)): \(error)")
                 lastError = "Your purchase went through, but we could not activate it yet. "
-                    + "It will activate automatically — no need to buy again."
+                    + "It will activate automatically, so there's no need to buy again."
             }
         }
 

@@ -18,8 +18,8 @@
 import XCTest
 @testable import Track
 
-/// The screen these back tells the user to compare two keys "character for
-/// character", so what it renders has to be the key and nothing else.
+/// The screens these back show values a person may compare character for
+/// character, so what they render has to be the key and nothing else.
 final class PublicKeyDisplayTests: XCTestCase {
 
     /// A real X25519 key, which SwiftUI hyphenates as `18483130b28de-` /
@@ -62,8 +62,8 @@ final class PublicKeyDisplayTests: XCTestCase {
         XCTAssertEqual(PublicKeyDisplay.grouped("abcdefghi"), "abcdefgh i")
     }
 
-    /// Both screens render through the same helper, because My Encryption Keys
-    /// promises the member's Security Details shows "exactly what you see here".
+    /// Both screens render through the same helper: Security details in
+    /// Settings and a member's Security details show the same values.
     func testTheSameInputRendersIdenticallyForBothScreens() {
         XCTAssertEqual(PublicKeyDisplay.grouped(auditKey), PublicKeyDisplay.grouped(auditKey))
     }

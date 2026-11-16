@@ -179,7 +179,7 @@ final class DeviceManagementViewModel: ObservableObject {
         switch (ok, failed) {
         case (_, 0):  return "Signed out \(ok) device\(ok == 1 ? "" : "s")"
         case (0, _):  return "Sign-out failed for all \(failed)"
-        default:      return "Signed out \(ok); \(failed) failed"
+        default:      return "Signed out \(ok), \(failed) failed"
         }
     }
 
@@ -333,13 +333,12 @@ struct DeviceManagementView: View {
             }
 
             // Above the rows, because it changes what the Sign out button on
-            // each of them means. Wording is deliberately about the recent past
-            // ("have not been able to confirm"), not a live claim that a service
-            // is down; the server only knows it failed open recently, and auth
-            // may already have recovered.
+            // each of them means. The web's words: "may be delayed", never a
+            // live claim that a service is down; the server only knows it
+            // could not confirm recently, and auth may already have recovered.
             if viewModel.signOutsUnenforced {
                 Section {
-                    Text("Sign-outs may not be taking effect. In the last few minutes we have not been able to confirm that sessions have ended, so a device you sign out here may keep receiving locations for a short time — up to 15 minutes for a phone, or until the session ends for a browser. To stop sharing immediately, leave the circle instead.")
+                    Text("Sign-outs may be delayed. A device you sign out here may keep receiving locations for a while: up to 15 minutes for a phone, or until its session ends for a browser. To stop sharing right away, leave the circle.")
                         .font(.footnote)
                         .accessibilityIdentifier("signouts-unenforced-warning")
                 }
@@ -351,7 +350,7 @@ struct DeviceManagementView: View {
 
             if !viewModel.isLoading && viewModel.items.isEmpty && viewModel.error == nil {
                 Section {
-                    Text("No tracking devices yet — grant location permission and start tracking on a phone to see it here.")
+                    Text("No devices are sharing location yet.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

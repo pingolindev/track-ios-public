@@ -1807,7 +1807,7 @@ final class SOSManager: ObservableObject {
         guard let activeCircle = CircleManager.shared.activeCircle else {
             // Silently returning here would mean tapping the button with no
             // active circle did nothing at all, with no explanation.
-            lastTriggerError = "No active circle — join or create one before notifying anyone."
+            lastTriggerError = "No active circle. Join or create one before notifying anyone."
             return
         }
 

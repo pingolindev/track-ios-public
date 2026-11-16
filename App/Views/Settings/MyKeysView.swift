@@ -23,31 +23,15 @@ import PingolinTrackSDK
 /// the Android app's `MyKeysFragment`. Titled "Security details"; nothing a
 /// person reads is named after keys.
 ///
-/// There is deliberately no "my safety number" here, because there is no such
-/// value. A safety number is computed over BOTH parties' material (see
-/// `CryptoManager::compute_safety_number`, which hashes
-/// `(user_id ‖ sharing_pk ‖ signing_pk)` for each side), so it only exists for
-/// a pair. Two things on this screen are directly comparable, and the copy
-/// below has to name both or the screen reads as a wall of hex that matches
-/// nothing:
+/// There is no "my security code" here: a code is computed over BOTH parties'
+/// values (`CryptoManager::compute_safety_number`), so it only exists for a
+/// pair and lives on the member's screen (`MemberDetailView`). The values here
+/// are the ones a member sees for this account under Show technical details
+/// there.
 ///
-///   1. The keys here == the keys a peer sees for YOU under Security details →
-///      Show technical details. Both are the lowercase hex of the same bytes,
-///      so they agree character for character.
-///   2. The security code on Security details for a member == the number THAT
-///      member sees for you on the same screen of their device. That pair is
-///      what you read aloud to each other; it never appears here.
-///
-/// Both paths are written through "Security details" because that is the only
-/// label the user can actually tap: `MemberRow`'s confirmation dialog in
-/// CirclesView declares `Button("Security details")`, and it is the sole route
-/// to `MemberDetailView`. "Security code" and "Show technical details" are
-/// headings inside that screen, so a path naming either as the entry point
-/// dead-ends on a label that does not exist.
-///
-/// Nothing here is secret: all three values are published to the server so
-/// peers can wrap circle keys for us. The value of showing them is that a
-/// member who suspects a substituted key can read their own back and compare.
+/// The copy is one line on purpose: text about security
+/// numbers is minimal; those who care know what to do with them. Nothing here
+/// is secret: all three values are published to the server.
 struct MyKeysView: View {
     @State private var copied = false
 
@@ -71,16 +55,7 @@ struct MyKeysView: View {
     var body: some View {
         List {
             Section {
-                Text("Other members can compare these details with what their phone shows for you, to confirm they're really talking to you.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("What matches what") {
-                Text("To check a security code, open Circles → the circle → that member's ⋯ button → Security details. They should open Security details for you on their phone. The twelve groups of digits will be the same on both phones — there is no security code of your own on this page, because it is always worked out from two people at once.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text("To check the details below, ask that member to open Circles → the circle → your ⋯ button → Security details → Show technical details. What they see there is exactly what you see here — the same characters in the same order. The spaces are ours, added every \(PublicKeyDisplay.groupSize) characters so the groups are easy to compare; Copy gives you the details without them.")
+                Text("These are the public values other members see for you.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -94,8 +69,6 @@ struct MyKeysView: View {
                     Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
                 }
                 .disabled(sharingPubkeyHex == nil && signingPubkeyHex == nil)
-            } footer: {
-                Text("Public values only. Nothing secret leaves this phone or is shown here.")
             }
         }
         .navigationTitle("Security details")

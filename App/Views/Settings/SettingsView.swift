@@ -158,7 +158,7 @@ struct SettingsView: View {
                         Text("Untrusted Environment")
                             .font(.subheadline)
                             .fontWeight(.semibold)
-                        Text("This device shows signs of jailbreak. Track keeps working normally, but a jailbroken device gives other software on it access to your data — including your family's locations.")
+                        Text("This device shows signs of jailbreak. Track keeps working normally, but a jailbroken device gives other software on it access to your data, including your family's locations.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -277,7 +277,7 @@ struct SettingsView: View {
                     .font(.title3)
                     .foregroundStyle(premiumManager.effectivePremium ? Color.orange : Color.secondary)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(premiumManager.effectivePremium ? "Track — \(premiumManager.tierLabel)" : "Track — Free")
+                    Text(premiumManager.effectivePremium ? "Track: \(premiumManager.tierLabel)" : "Track: Free")
                         .font(.subheadline.weight(.semibold))
                     // Rendered from the server's
                     // `history_days`, never from the tier: a
@@ -584,7 +584,7 @@ struct SettingsView: View {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Security details")
-                        Text("What other members compare to confirm it's you")
+                        Text("The public values other members see for you")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -878,7 +878,7 @@ struct SettingsView: View {
         } header: {
             Text("Notification Delivery")
         } footer: {
-            Text("Notification detail: \(settings.notificationDetailLevel.example). The app's notification list follows this setting too; at Generic it keeps the standard wording.")
+            Text("Notification detail: \(settings.notificationDetailLevel.example). The app's notification list follows this setting too. At Generic it keeps the standard wording.")
         }
 
         Section {
@@ -895,7 +895,7 @@ struct SettingsView: View {
                             .font(.subheadline)
                             .fontWeight(.semibold)
                     }
-                    Text("The switches here show defaults, not your settings, until they load, and changing one does nothing until then. This finishes by itself.")
+                    Text("These switches show the defaults until your settings load. Changing one does nothing until then.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -937,8 +937,8 @@ struct SettingsView: View {
                             // iOS has more room, but the intent is parity.
                             Text("Server-side geocoder")
                             Text(useServerGeocoder
-                                 ? "Pelias gateway, hosted lookup"
-                                 : "Offline tiles, on-device")
+                                 ? "Looks up addresses on our server"
+                                 : "Looks up addresses on this phone")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -964,7 +964,7 @@ struct SettingsView: View {
         .alert("Server-side geocoder", isPresented: $showingGeocoderInfo) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Look up addresses and places from our hosted geocoder instead of on-device data.\n\nYour search text and the coordinates you look up are sent to our server. Requests carry no account identifier, and coordinates are rounded to about 10 metres before they are sent, so the server does not link queries to you or your account.\n\nWhen this is off, nothing about your searches leaves the device — lookups use map data downloaded to your phone.")
+            Text("Sends your searches and the coordinates you look up to our server, without your account details. When off, searches use map data downloaded to this phone.")
         }
     }
 
@@ -987,7 +987,7 @@ struct SettingsView: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundStyle(.orange)
-                    Text("Track currently only updates your location while the app is open. Enable \"Always\" so your circles can see your location during drives, walks, and stops.")
+                    Text("Track only updates your location while the app is open. Enable \"Always\" so your circles can see your location when it's closed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button {
@@ -1028,7 +1028,7 @@ struct SettingsView: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundStyle(.orange)
-                    Text("Precise Location is off, so iOS only tells Track roughly which area you are in — too coarse to put you on your circle's map. Turn it on to start appearing again.")
+                    Text("Precise Location is off, so iOS only tells Track roughly which area you are in, which is too coarse to put you on your circle's map. Turn it on to start appearing again.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button {
@@ -1456,7 +1456,7 @@ struct LocationPermissionsView: View {
                 Text("Track needs \"Always\" location permission to share your location with your circles even when the app is in the background.")
                     .foregroundStyle(.secondary)
                 if locationService.hasReducedAccuracy {
-                    Text("It also needs Precise Location. With that off, iOS reports your position to within kilometres, which is too coarse to place you on your circle's map — so you stop appearing on it.")
+                    Text("It also needs Precise Location. With that off, iOS reports your position to within kilometres, so you stop appearing on your circle's map.")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -1685,7 +1685,7 @@ struct DataExportView: View {
     @State private var exportPassphrase: String = ""
     @State private var built: ExportedFile?
 
-    /// What a sealed backup is, and where it can actually be opened.
+    /// What a passphrase does to the file, and where it can actually be opened.
     ///
     /// The notice does not claim that a sealed file opens on any Pingolin app.
     /// Track for iOS has no import path whatsoever: no
@@ -1699,9 +1699,8 @@ struct DataExportView: View {
     /// Hoisted out of the view so the claim is testable; see
     /// ExportFooterCopyTests.
     static let sealedFileNotice =
-        "With a passphrase the backup is sealed and only that passphrase opens it. "
-        + "We cannot recover it. To restore from a backup, open the file on the Pingolin "
-        + "website — Track for iPhone can write a backup but cannot read one back in."
+        "With a passphrase, only that passphrase opens the file, and a lost one can't be recovered. "
+        + "To restore from a backup, use the Pingolin website: Track for iPhone can't read one back in."
 
     enum Range: String, CaseIterable, Identifiable {
         case days7 = "Last 7 days"
@@ -1731,7 +1730,7 @@ struct DataExportView: View {
     var body: some View {
         List {
             Section {
-                Text("You can export a copy of all your data stored in Track — your devices, circles, places, check-ins and location history.")
+                Text("You can export a copy of all your data stored in Track: your devices, circles, places, check-ins and location history.")
                     .foregroundStyle(.secondary)
             }
 
@@ -1755,10 +1754,12 @@ struct DataExportView: View {
                 .disabled(isExporting)
             } footer: {
                 // Said plainly, because it is the one property of the file that
-                // can hurt someone: it is decrypted. That is what makes it
-                // useful (it opens in other tools without needing anything from
-                // us), and it is also why it must not be left in a shared folder.
-                Text("The file is written in JSON, decrypted on this device. Anyone who opens it can read it, so keep it somewhere safe — or seal it below.")
+                // can hurt someone: anyone can read it. That is what makes it
+                // useful: it opens in other tools without needing anything from
+                // us, and it is also why it must not be left in a shared folder.
+                // The web's sentence, word for word (its exportCopy test pins the
+                // two as identical); the passphrase section is right below.
+                Text("Anyone who opens the file can read it, so keep it somewhere safe or add a passphrase below.")
             }
 
             Section("Passphrase (optional)") {
@@ -1836,8 +1837,7 @@ struct DeleteAccountSheet: View {
     /// Under "You still have credit", in place of the server's sentence (which
     /// named the amount): the same facts and the same two ways on.
     nonisolated static let unspentCreditText = "Deleting your account destroys the credit on it, and it can't be returned "
-        + "afterwards because the record goes with the account. Write to help@support.pingolin.com to have it "
-        + "refunded first, or delete anyway."
+        + "afterwards. Write to help@support.pingolin.com to have it refunded first, or delete anyway."
 
     @StateObject private var authManager = AuthManager.shared
     @Environment(\.dismiss) private var dismiss
@@ -1870,7 +1870,7 @@ struct DeleteAccountSheet: View {
             // deleting from Track has no way to know their notes go with it
             // unless the app says so here, before the button.
             Section {
-                Text("This is your Pingolin account, which every Pingolin app shares. Deleting it deletes your data in all of them — Pingolin Track and Pingolin Note — not just this app.")
+                Text("This is your Pingolin account for every Pingolin app. Deleting it deletes your data in both Pingolin Track and Pingolin Note.")
                     .font(.subheadline)
             }
 
@@ -1880,7 +1880,7 @@ struct DeleteAccountSheet: View {
             // there is no screen left to tell them that on, so it goes here,
             // where they can still act on it.
             Section {
-                Text("Deleting your account also cancels your subscription. If you subscribed through the App Store, only you can cancel that - in Settings, tap your name, then Subscriptions. We cannot do it for you.")
+                Text("Deleting your account cancels any subscription you pay for through us. An App Store subscription is different: only you can cancel it, in your Apple account settings.")
                     .font(.subheadline)
             }
 

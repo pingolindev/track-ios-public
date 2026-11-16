@@ -583,7 +583,7 @@ struct CircleRow: View {
                 if claims.claim(for: circle.id) != nil {
                     Label(
                         circle.isOwner
-                            ? "Someone asked to take over — tap to refuse"
+                            ? "Someone asked to take over. Tap to refuse."
                             : "Someone asked to take over this circle",
                         systemImage: "person.crop.circle.badge.exclamationmark"
                     )
@@ -1050,10 +1050,9 @@ struct MemberRow: View {
     /// The question before a hand-over. For someone invited to an email it
     /// starts with their number, as a promotion's does: ownership is more
     /// than admin. Static so a test can pin the words.
-    static func handOverQuestion(name: String, circle: String, number: String?,
-                                 device: String = DeviceNoun.current) -> String {
+    static func handOverQuestion(name: String, circle: String, number: String?) -> String {
         let check = number.map {
-            "\(name) was invited by email, so this \(device) can't tell on its own that the account is really theirs. "
+            "\(name) was invited to this circle by email. "
                 + "If you're not sure it's them, check with \(name) another way first. Their number: \($0). "
         } ?? ""
         return check + "\(name) will have full control of \(circle): they can delete it or hand it on. "
@@ -1070,11 +1069,12 @@ struct MemberRow: View {
         }
     }
 
-    /// The question before promoting someone invited to an email. Static
-    /// so a test can pin the words.
-    static func promotionQuestion(name: String, number: String?, device: String = DeviceNoun.current) -> String {
+    /// The question before promoting someone invited to an email, in the
+    /// Android app's words (`promote_email_invitee_body`). Static so a test
+    /// can pin the words.
+    static func promotionQuestion(name: String, number: String?) -> String {
         let check = number.map { " Their number: \($0)." } ?? ""
-        return "\(name) was invited by email, so this \(device) can't tell on its own that the account is really theirs. As an admin, everyone's app will rely on them. If you're not sure it's them, check with \(name) another way first.\(check)"
+        return "\(name) was invited to this circle by email. If you're not sure it's them, check with \(name) another way first.\(check)"
     }
 
     private func promote(keys: MemberKeyPair?) {
@@ -1289,7 +1289,7 @@ struct MemberRow: View {
                             do {
                                 removedWithoutRotationWarning = try await circleManager
                                     .revokeMemberAccess(from: target.circleId, userId: target.userId)
-                                    ?? "They're out of the circle. It finishes securing itself as soon as a member's app is online."
+                                    ?? "They're out of the circle. It finishes updating as soon as a member's app is online."
                             } catch {
                                 removeError = error.plainText
                             }
@@ -1302,10 +1302,10 @@ struct MemberRow: View {
                 // in an alert's message builder, so splitting the reason and
                 // the consequence across two would silently drop the half that
                 // matters most.
-                Text("\(removeError ?? "")\n\nThey are still in the circle and can still see its locations.\n\nYou can remove them now anyway: they leave the circle straight away, and it finishes securing itself as soon as a member's app is online. Anything they have already seen stays with them.")
+                Text("\(removeError ?? "")\n\nThey are still in the circle and can still see its locations.\n\nYou can remove them now anyway. They leave the circle straight away, and anything they have already seen stays with them.")
             }
             .alert(
-                "Removed — finishing up",
+                "Removed. The circle is still updating",
                 isPresented: Binding(
                     get: { removedWithoutRotationWarning != nil },
                     set: { if !$0 { removedWithoutRotationWarning = nil } }
@@ -1621,7 +1621,7 @@ struct InviteMemberSheet: View {
                 // a bad place to put something that must not silently vanish.
                 Section {
                     Label {
-                        Text("They will be able to see this circle's existing location history, not only what happens from now on — two days of it on a free circle, up to a year on a premium one.")
+                        Text("They'll also see this circle's past location history: two days on a free circle, up to a year on a premium one.")
                             .font(.footnote)
                     } icon: {
                         Image(systemName: "clock.arrow.circlepath")
@@ -1915,7 +1915,7 @@ struct PrivacySettingsSheet: View {
                 } header: {
                     Text("Bubble Mode")
                 } footer: {
-                    Text("Bubble mode shows you within a radius instead of your exact location")
+                    Text("Shows your approximate area instead of your exact location.")
                 }
 
                 // Pause and Resume are sent at once, as on the web and

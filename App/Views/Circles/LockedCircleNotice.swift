@@ -72,7 +72,7 @@ extension CircleLockReason {
             return LockedCircleCopy(
                 title: "Enter your password",
                 caption: "Enter your password to open your circles",
-                explanation: "This \(device) needs your password to open your circles. Nothing has been lost.",
+                explanation: "This \(device) needs your password to open your circles.",
                 opensAccountSettings: false,
                 asksForPassword: true
             )
@@ -95,7 +95,7 @@ extension CircleLockReason {
             return LockedCircleCopy(
                 title: "Waiting for your circle",
                 caption: "Waiting for your circle",
-                explanation: "You reset your password, so another member of \(circle) has been asked to confirm it's you. It opens here as soon as one of them does. If you still have your recovery key, you can restore your previous setup instead: Account → Settings → Data from before your password reset.",
+                explanation: "You reset your password, so a member of \(circle) has been asked to confirm it's you. It opens here once they do. If you still have your recovery key, you can restore access in your account settings instead.",
                 opensAccountSettings: true
             )
         case .keyOutOfDate, .awaitingNewerKey, .keyNotVerified, .keyUnreadable, .keyUnavailable:

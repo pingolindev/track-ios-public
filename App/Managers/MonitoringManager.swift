@@ -377,8 +377,8 @@ final class MonitoringManager: ObservableObject {
     /// tick that changes nothing.
     ///
     /// `surfaceFailures: false` is load-bearing. The default is `true`, which paints
-    /// the "Couldn't reach server" banner, and this pass runs in the BACKGROUND: a
-    /// failure here must not leave "Couldn't reach server" sitting on the user's map.
+    /// the "Couldn't reach Pingolin" banner, and this pass runs in the BACKGROUND: a
+    /// failure here must not leave "Couldn't reach Pingolin" sitting on the user's map.
     /// The wake-path entry point.
     ///
     /// A watcher who does not share their own location has NO background location
@@ -484,7 +484,7 @@ final class MonitoringManager: ObservableObject {
             let refresh: CircleManager.MemberLocationRefresh
             // `surfaceFailures: false`: this evaluator runs in the BACKGROUND, off
             // the 900 s timer and off location wakes, so the parameter's default of
-            // `true` could paint "Couldn't reach server" onto the map of a user who
+            // `true` could paint "Couldn't reach Pingolin" onto the map of a user who
             // did not ask for anything. The banner belongs to interactions a user
             // initiated; the `catch` below is all this evaluator needs.
             do { refresh = try await memberRefresh(for: circleId) }

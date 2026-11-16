@@ -21,8 +21,7 @@ import SwiftUI
 /// app (the same words on web and Android). Static so a test can pin them.
 enum RegistrationGateCopy {
     static let underReviewTitle = "Your account is under review"
-    static let underReviewBody = "Your account request is checked by an admin before access is granted. "
-        + "We'll email you the moment it's approved — then Track unlocks automatically."
+    static let underReviewBody = "An admin checks each account request. We'll email you when yours is approved."
     static let notApprovedTitle = "Your application wasn't approved"
     static let notApprovedBody = "This account can't be used with Track. "
         + "We delete it, and your application, 30 days after the decision."

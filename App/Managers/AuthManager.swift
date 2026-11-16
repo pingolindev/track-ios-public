@@ -1938,7 +1938,7 @@ final class AuthManager: ObservableObject {
         // 0), but if the server ever widens that flag, say something rather
         // than showing a bare "Your account is deleted, but".
         if parts.isEmpty {
-            return "Your account is deleted. Your subscription may need attention — write to help@support.pingolin.com and we will check it."
+            return "Your account is deleted. Your subscription may need attention. Write to help@support.pingolin.com and we will check it."
         }
         return "Your account is deleted.\n\n" + parts.joined(separator: "\n\n")
     }
@@ -1951,7 +1951,7 @@ final class AuthManager: ObservableObject {
     nonisolated static func erasureNotice(dataErasure: String) -> String? {
         switch dataErasure {
         case "queued":
-            return "Your locations and notes could not be erased at that moment — one of the services was unreachable. The erasure is recorded and will be retried until it goes through. If you want to know that it has, write to privacy@mail.pingolin.com."
+            return "Your locations and notes couldn't be erased just now. It will be retried until it goes through. To check that it has, write to privacy@mail.pingolin.com."
         case "failed":
             return "We could not record the erasure of your locations and notes, so it may not have happened. Write to privacy@mail.pingolin.com and we will complete it."
         default:
@@ -2421,18 +2421,20 @@ final class AuthManager: ObservableObject {
         var errorDescription: String? {
             switch self {
             case .noTempToken:
-                return "No temporary token for 2FA"
+                // No two-step attempt is open any more: the same words as an
+                // attempt that ended.
+                return "That sign-in has ended. Please sign in again."
             case .biometricNotAvailable:
                 return "Biometric authentication not available"
             case .invalidCredentials:
                 return "Invalid email or password"
             case .noUserId:
-                return "No user id available"
+                return "You're not signed in."
             case .keysUnavailable:
-                // Says what happened (the password was right), what it would
-                // have meant, and that nothing was left half-done: the one
-                // question a person has after "Couldn't sign in".
-                return "Your password was accepted, but this phone couldn't open your account's data, so you haven't been signed in — your circles would have been unreadable. Please try again. If it keeps happening, sign in to your account on the web to check it."
+                // Says what happened (the password was right) and what to do
+                // if it keeps happening: not "Couldn't sign in", which reads as
+                // a typo to retype.
+                return "Your password was accepted, but this phone couldn't open your account's data. Please try again, and sign in on the web to check your account if it keeps happening."
             case .unexpectedResponse, .serverNotVerified:
                 return "Couldn't sign in. Please try again."
             case .wrongTwoFactorCode:

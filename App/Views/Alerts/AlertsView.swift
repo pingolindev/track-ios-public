@@ -414,7 +414,7 @@ struct AlertEditorView: View {
                     } header: {
                         Text("Watch")
                     } footer: {
-                        Text("Select members to watch, or leave all unchecked to watch everyone. Watched-member inactivity is evaluated on this device, so it fires while the app is running.")
+                        Text("Select members to watch, or leave all unchecked to watch everyone. It's checked on this phone, so it fires while the app is running.")
                     }
                 }
             }

@@ -357,7 +357,7 @@ final class HistoryViewModel: ObservableObject {
         guard let allowedDays, allowedDays > 0 else { return nil }
         guard requestedDays - allowedDays > 2 else { return nil }
         let allowed = allowedDays == 1 ? "1 day" : "\(allowedDays) days"
-        return "Showing \(allowed) of history — your plan's limit. "
+        return "Showing \(allowed) of history, your plan's limit. "
             + "You asked for \(requestedDays) days."
     }
 }

@@ -102,23 +102,19 @@ extension SelfKeyHealth {
             // This repairs itself. This device reports the copy it can't
             // open; the server wakes the account's other devices, and the
             // one that holds the key republishes it; the next pass here
-            // opens it. Said as what happens (no "Repair my other
-            // devices", no "sign out and back in") and honestly
-            // conditional: it needs another device of theirs that has the
-            // history.
+            // opens it. Said as what happens: no "Repair my other
+            // devices", no "sign out and back in", in the web's words.
             return SelfKeyNotice(
                 title: "Can't show your location history yet",
-                detail: "Your circles aren't affected — members still see you. "
-                    + "Your personal history and personal places show here as soon as another of "
-                    + "your devices that can show them is online.",
+                detail: "Your circles still see you. "
+                    + "Your personal history and places show here once one of your other devices is online.",
                 severity: .error
             )
 
         case .replacementRefused:
-            // Says the one thing that makes this actionable: nothing is
-            // lost, it is on the server and on whichever device set it
-            // up. A generic "couldn't set up" would send the user looking
-            // for a fix on THIS device, where there isn't one.
+            // What happens, and nothing about why this device was refused:
+            // the setup is on the server and on whichever device made it, so
+            // there is no fix to look for on THIS device.
             //
             // Unlike `undecryptable` this can clear itself (the refusal
             // proves the setup is stored, so the next lookup may well
@@ -126,11 +122,8 @@ extension SelfKeyHealth {
             // nobody is told to reopen anything.
             return SelfKeyNotice(
                 title: "Location history isn't set up on this device",
-                detail: "Your circles aren't affected — members still see you. "
-                    + "Your account already has location history that this device wasn't allowed "
-                    + "to replace, so personal history and personal places stay unreadable here "
-                    + "and personal tracking isn't recording. This device keeps checking by itself, "
-                    + "and it all shows here as soon as another of your devices that can show it is online.",
+                detail: "Your circles still see you. "
+                    + "It sets itself up once one of your other devices is online.",
                 severity: .error
             )
 
@@ -139,8 +132,7 @@ extension SelfKeyHealth {
             // alone. Settings shows the field right under this.
             return SelfKeyNotice(
                 title: "Enter your password",
-                detail: "This device needs your password to show your personal history and personal places. "
-                    + "Nothing has been lost.",
+                detail: "This device needs your password to show your personal history and personal places.",
                 severity: .error
             )
 
@@ -159,18 +151,17 @@ extension SelfKeyHealth {
             return SelfKeyNotice(
                 title: "Setting up your location history",
                 detail: "Your personal history and personal places appear here as soon as this device "
-                    + "reaches the server. Nothing has been lost.",
+                    + "reaches the server.",
                 severity: .warning
             )
 
         case .unreachable:
-            // Says what was NOT done on purpose. `ensure()` fails closed here
-            // rather than replacing anything, and a user who is told only
-            // "couldn't check" has no way to know their history is intact.
+            // `ensure()` fails closed here rather than replacing anything. The
+            // notice says what the person sees and when it ends.
             return SelfKeyNotice(
                 title: "Couldn't check your location history",
                 detail: "Your personal history and personal places may not load until this device "
-                    + "reaches the server again. Nothing has been changed.",
+                    + "reaches the server again.",
                 severity: .warning
             )
         }

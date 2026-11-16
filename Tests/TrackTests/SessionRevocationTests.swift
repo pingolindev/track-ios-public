@@ -129,11 +129,11 @@ final class SessionRevocationTests: XCTestCase {
     /// ErrorBanner for that copy by name; an ordinary `unauthorized` error
     /// never produces it.
     @MainActor
-    func testRevocationBannerReadsAsSessionExpired() throws {
+    func testRevocationBannerSaysSignedOut() throws {
         ErrorBanner.shared.dismiss()
         ErrorBanner.shared.postSignedOut()
         XCTAssertEqual(ErrorBanner.shared.current?.kind, .error)
-        XCTAssertEqual(ErrorBanner.shared.current?.message, "Your session expired. Please sign in again.")
+        XCTAssertEqual(ErrorBanner.shared.current?.message, "You have been signed out. Please sign in again.")
         ErrorBanner.shared.dismiss()
 
         let root = URL(fileURLWithPath: #filePath)

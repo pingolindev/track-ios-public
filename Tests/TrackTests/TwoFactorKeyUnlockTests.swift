@@ -265,7 +265,7 @@ final class TwoFactorKeyUnlockTests: XCTestCase {
     /// 403 keeps the ordinary message.
     @MainActor
     func testAnUnverifiedEmailIsToldToVerifyNotThatThePasswordIsWrong() {
-        let verify = "Please verify your email address first. Open the link we sent you, then sign in again."
+        let verify = "Verify your email address first. Open the link we sent you, then sign in again."
         for error in [APIError(code: "email_not_verified", message: "x", errorCode: "email_not_verified"),
                       APIError(code: "http_403", message: "x", errorCode: "email_not_verified")] {
             XCTAssertEqual(LoginView.friendlyMessage(for: error), verify)

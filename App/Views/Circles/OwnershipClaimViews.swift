@@ -81,8 +81,8 @@ struct OwnershipClaimSection: View {
                         // ONE Text: SwiftUI renders only the first view in an
                         // alert's message builder, so a second would vanish.
                         Text(
-                            "You stay the owner of this circle. The request ends for good — "
-                            + "an admin can ask again later, and you would be told again if they do."
+                            "You stay the owner of this circle. "
+                            + "An admin can ask again later, and you would be told if they do."
                         )
                     }
                     .alert(
@@ -230,7 +230,7 @@ struct ClaimOwnershipRow: View {
                 Button("Ask") { Task { await open() } }
             } message: {
                 Text(
-                    "This is for a circle whose owner can no longer act — only they can "
+                    "This is for a circle whose owner can no longer act. Only the owner can "
                     + "delete it, hand it on, or change who is an admin.\n\n"
                     + "The owner is told straight away and can refuse with one tap. "
                     + "If they do nothing for two weeks, you become the owner. "

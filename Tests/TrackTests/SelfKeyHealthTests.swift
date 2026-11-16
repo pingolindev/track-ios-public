@@ -93,7 +93,7 @@ final class SelfKeyHealthTests: XCTestCase {
         let detail = try XCTUnwrap(SelfKeyHealth.undecryptable.notice?.detail)
 
         XCTAssertTrue(
-            detail.localizedCaseInsensitiveContains("as soon as another of your devices that can show them is online"),
+            detail.localizedCaseInsensitiveContains("once one of your other devices is online"),
             "must say what brings it back; got: \(detail)"
         )
         for gone in ["Repair my other devices", "Security details", "sign out", "Signing out"] {
@@ -122,7 +122,7 @@ final class SelfKeyHealthTests: XCTestCase {
         let detail = try XCTUnwrap(SelfKeyHealth.undecryptable.notice?.detail)
 
         XCTAssertTrue(
-            detail.localizedCaseInsensitiveContains("circles aren't affected"),
+            detail.localizedCaseInsensitiveContains("circles still see you"),
             "must bound the damage; got: \(detail)"
         )
     }
@@ -157,7 +157,7 @@ final class SelfKeyHealthTests: XCTestCase {
         let notice = try XCTUnwrap(SelfKeyHealth.noAccountKeys.notice)
 
         XCTAssertEqual(notice.title, "Enter your password")
-        XCTAssertEqual(notice.detail, "This device needs your password to show your personal history and personal places. Nothing has been lost.")
+        XCTAssertEqual(notice.detail, "This device needs your password to show your personal history and personal places.")
         XCTAssertFalse(notice.detail.localizedCaseInsensitiveContains("sign out"), notice.detail)
         XCTAssertFalse(notice.detail.localizedCaseInsensitiveContains("sign in again"), notice.detail)
         XCTAssertNotEqual(
@@ -181,17 +181,14 @@ final class SelfKeyHealthTests: XCTestCase {
         }
     }
 
-    /// `ensure()` fails closed on a lookup error rather than minting; that is
+    /// `ensure()` fails closed on a lookup error rather than minting: that is
     /// what stops one flaky GET at launch from overwriting a good self key. The
-    /// user is owed that fact; "couldn't check" alone reads like data loss.
-    func testTheUnreachableNoticeSaysNothingWasChanged() throws {
+    /// notice says what the person sees and when it ends, with no reassuring
+    /// sentence after it.
+    func testTheUnreachableNoticeSaysWhenItEnds() throws {
         let detail = try XCTUnwrap(SelfKeyHealth.unreachable.notice?.detail)
 
-        XCTAssertTrue(
-            detail.localizedCaseInsensitiveContains("has been changed")
-                || detail.localizedCaseInsensitiveContains("unchanged"),
-            "must say the key was left alone; got: \(detail)"
-        )
+        XCTAssertEqual(detail, "Your personal history and personal places may not load until this device reaches the server again.")
     }
 
     // MARK: - The server's refusal
@@ -209,24 +206,20 @@ final class SelfKeyHealthTests: XCTestCase {
         XCTAssertFalse(notice.detail.isEmpty)
     }
 
-    /// The one fact that makes a refusal actionable rather than alarming: the
-    /// real key was not destroyed, it is on the server, and it can be
-    /// re-published. Lose that and the notice is indistinguishable from data
-    /// loss, the opposite of what happened.
-    func testTheRefusedNoticeSaysTheKeyStillExists() throws {
+    /// What makes a refusal bearable rather than alarming: it comes back by
+    /// itself, and the circles are untouched. Two short sentences, and no
+    /// account of why this device was refused.
+    func testTheRefusedNoticeSaysItSetsItselfUp() throws {
         let detail = try XCTUnwrap(SelfKeyHealth.replacementRefused.notice?.detail)
 
+        XCTAssertEqual(detail, "Your circles still see you. It sets itself up once one of your other devices is online.")
         XCTAssertTrue(
-            detail.localizedCaseInsensitiveContains("already has location history"),
-            "must say what is stored survived; got: \(detail)"
-        )
-        XCTAssertTrue(
-            detail.localizedCaseInsensitiveContains("as soon as another of your devices that can show it is online"),
+            detail.localizedCaseInsensitiveContains("once one of your other devices is online"),
             "must say what brings it back; got: \(detail)"
         )
         XCTAssertTrue(
-            detail.localizedCaseInsensitiveContains("circles aren't affected"),
-            "must bound the damage, as the sibling states do; got: \(detail)"
+            detail.localizedCaseInsensitiveContains("circles still see you"),
+            "must bound the damage, as the sibling state does; got: \(detail)"
         )
     }
 
@@ -242,7 +235,7 @@ final class SelfKeyHealthTests: XCTestCase {
         )
         let detail = try XCTUnwrap(SelfKeyHealth.replacementRefused.notice?.detail)
         XCTAssertTrue(
-            detail.localizedCaseInsensitiveContains("keeps checking by itself"),
+            detail.localizedCaseInsensitiveContains("sets itself up"),
             "a refusal is retried by the app itself, and the copy says so; got: \(detail)"
         )
         XCTAssertFalse(detail.localizedCaseInsensitiveContains("Reopen"), "nobody is told to reopen anything")

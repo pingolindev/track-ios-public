@@ -1201,9 +1201,9 @@ final class SDKLocationStreamer {
         case waitingForSharingRecord
         var errorDescription: String? {
             switch self {
-            case .notRunning:       return "Location stream isn't running yet"
+            case .notRunning:       return "Location sharing hasn't started yet"
             case .notSignedIn:      return "Not signed in"
-            case .encryptionFailed: return "Couldn't encrypt your location"
+            case .encryptionFailed: return "Couldn't send your location"
             case .transportFailed:  return "Couldn't reach the server"
             case .keyNotCurrent:    return "This circle is waiting to sync, so your location is queued for it until then"
             case .notSharingWhenTaken:
@@ -1254,7 +1254,7 @@ final class SDKLocationStreamer {
             let streamingAfter = locationManager?.isStreaming() ?? false
             appendStreamerDiag("sendNow ok streamingAfter=\(streamingAfter)")
             if !streamingAfter {
-                return .failed(message: "Send queued but gRPC stream is down")
+                return .failed(message: "Couldn't send your location: Track isn't connected right now")
             }
             Self.lastSendLocationMs = now
             return .success

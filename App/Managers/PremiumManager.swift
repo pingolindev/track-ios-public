@@ -181,7 +181,7 @@ struct PremiumPrompt: Identifiable {
         // Premium would be a false claim.
         case "geocode":
             return ("Address search",
-                    "Server-side address lookup is a Premium feature.", "")
+                    "Looking up addresses on our server is a Premium feature.", "")
         default:
             return ("Premium feature", "This is a Premium feature.",
                     resource.replacingOccurrences(of: "_", with: " "))

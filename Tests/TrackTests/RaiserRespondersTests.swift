@@ -217,9 +217,9 @@ final class RaiserRespondersTests: XCTestCase {
         XCTAssertEqual(SOSDeliveryCopy.verdict(try delivery(nobody, checking: false)), nobodyText, "kept once the checks end")
         let partial = #"{"addressable":3,"confirmed":1,"dispatched":3,"emailed":1,"recipients":3,"state":"partial"}"#
         XCTAssertEqual(SOSDeliveryCopy.verdict(try delivery(partial, checking: true)),
-                       "1 of 3 confirmed their device received it. The rest have not yet — a phone that is off or has no "
+                       "1 of 3 confirmed their device received it. The rest have not yet. A phone that is off or has no "
                        + "signal cannot confirm.\n\nWe also emailed 1.\n\nConfirmed means the notification reached "
-                       + "their device — not that anyone has read it or is on their way.")
+                       + "their device. It doesn't mean anyone has read it or is on their way.")
         let all = #"{"addressable":2,"confirmed":2,"dispatched":2,"emailed":0,"recipients":2,"state":"confirmed"}"#
         XCTAssertTrue(SOSDeliveryCopy.verdict(try delivery(all, checking: false))
             .hasPrefix("All 2 confirmed their device received it."))

@@ -157,8 +157,8 @@ final class OwnershipClaimPresentationTests: XCTestCase {
         XCTAssertTrue(p.message.contains("Sam Rivera"), "name the person if the roster knows them: \(p.message)")
         // What is being taken: ownership, spelled out, because most owners
         // have never had to think about what owning a circle actually confers.
-        XCTAssertTrue(p.message.contains("delete it"), p.message)
-        XCTAssertTrue(p.message.contains("who is an admin"), p.message)
+        XCTAssertTrue(p.message.contains("delete the circle"), p.message)
+        XCTAssertTrue(p.message.contains("choose its admins"), p.message)
         // When.
         let expected = OwnershipClaimPresentation.format(
             deadline: date(2026, 9, 6), locale: locale, timeZone: utc
@@ -167,27 +167,25 @@ final class OwnershipClaimPresentationTests: XCTestCase {
         XCTAssertEqual(p.deadlineText, expected)
         // What refusing does.
         XCTAssertTrue(p.message.lowercased().contains("refusing"), p.message)
-        XCTAssertTrue(p.message.contains("permanently"), "a refused claim is never reopened: \(p.message)")
+        XCTAssertTrue(p.message.contains("ends this request"), "a refused claim is over: \(p.message)")
     }
 
-    /// The claim removes nobody and changes nothing about visibility; an owner
-    /// deciding under time pressure should not have to guess at that.
+    /// The claim removes nobody. An owner deciding under time pressure should
+    /// not have to guess at that.
     func testTheOwnerMessageSaysWhatDoesNotChange() throws {
         let p = try XCTUnwrap(make(claim(), viewerUserId: "owner-1", viewerIsOwner: true))
         XCTAssertTrue(p.message.contains("Nobody leaves the circle"), p.message)
     }
 
     /// What SURVIVES a transfer. The server makes the outgoing owner an admin
-    /// who may still rotate keys, on purpose (they are unreachable, not
-    /// untrusted), so the owner keeps member removal, and loses only deleting
-    /// the circle and handing it on. Saying so is the difference between a
+    /// who may still rotate keys, on purpose: they are unreachable, not
+    /// untrusted. Saying that they stay an admin is the difference between a
     /// fair decision and a scared one (in plain words, without mentioning
     /// keys).
     func testTheOwnerIsToldTheyWouldKeepAdmin() throws {
         let p = try XCTUnwrap(make(claim(), viewerUserId: "owner-1", viewerIsOwner: true))
 
-        XCTAssertTrue(p.message.contains("stay an admin"), p.message)
-        XCTAssertTrue(p.message.contains("remove members"), p.message)
+        XCTAssertTrue(p.message.contains("You would stay an admin."), p.message)
         XCTAssertNil(p.message.range(of: "key", options: .caseInsensitive), "no key talk: \(p.message)")
     }
 
@@ -256,13 +254,13 @@ final class OwnershipClaimPresentationTests: XCTestCase {
             make(claim(resolvesAt: iso(date(2026, 8, 23, 23))),
                  viewerUserId: "owner-1", viewerIsOwner: true, now: date(2026, 8, 23, 1))
         )
-        XCTAssertTrue(today.message.contains("— today."), today.message)
+        XCTAssertTrue(today.message.contains(", which is today."), today.message)
 
         let tomorrow = try XCTUnwrap(
             make(claim(resolvesAt: iso(date(2026, 8, 24, 1))),
                  viewerUserId: "owner-1", viewerIsOwner: true, now: date(2026, 8, 23, 23))
         )
-        XCTAssertTrue(tomorrow.message.contains("— tomorrow."), tomorrow.message)
+        XCTAssertTrue(tomorrow.message.contains(", which is tomorrow."), tomorrow.message)
     }
 
     /// A deadline already past: the server settles claims on a schedule, so

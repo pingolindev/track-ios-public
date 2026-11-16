@@ -150,7 +150,7 @@ final class NoServerTextTests: XCTestCase {
                        "This purchase belongs to a different account.")
         XCTAssertTrue(DeleteAccountSheet.unspentCreditText.hasPrefix("Deleting your account destroys the credit on it"))
         XCTAssertEqual(ActiveSOSCard.closeFailure(APIError(code: "http_500", message: raw)),
-                       "Still active — couldn't update your circle. " + APIError.troubleText)
+                       "Still active: couldn't update your circle. " + APIError.troubleText)
         XCTAssertEqual(InvitesManager.cannotBeUsedText, "This invitation can't be used any more.")
     }
 

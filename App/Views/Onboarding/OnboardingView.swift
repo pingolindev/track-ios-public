@@ -94,7 +94,7 @@ struct OnboardingView: View {
             icon: "paperplane.fill",
             iconColor: .blue,
             title: "Welcome to Track",
-            subtitle: "Share your location with the people you choose, encrypted end-to-end. The server can't read where you are or who you're sharing with.",
+            subtitle: "Share your location with the people you choose, encrypted end-to-end.",
             actionTitle: nil,
             actionHandler: nil
         )
@@ -120,7 +120,7 @@ struct OnboardingView: View {
             // notice shown when a circle is created or joined
             // (LocationConsentView); this is a permission prompt, and at this
             // point in the flow there is no circle to name recipients for.
-            subtitle: "Track needs your location to share it with the circles you choose. Nothing is shared until you create or join one, and we'll tell you exactly what leaves your phone before that happens.",
+            subtitle: "Track needs your location to share it with the circles you choose. Nothing is shared until you create or join one.",
             actionTitle: "Allow Location",
             actionHandler: {
                 LocationService.shared.requestAuthorization()
@@ -153,7 +153,7 @@ struct OnboardingView: View {
             icon: "figure.walk.motion",
             iconColor: .green,
             title: "Motion (Optional)",
-            subtitle: "If you allow motion, Track notices the moment you start moving and shares a fresh location right away, instead of your circle waiting for the next update. We never collect or upload motion data itself.",
+            subtitle: "If you allow motion, Track notices when you start moving and shares a fresh location right away.",
             actionTitle: "Allow Motion",
             actionHandler: {
                 MotionDetectionManager.shared.start()

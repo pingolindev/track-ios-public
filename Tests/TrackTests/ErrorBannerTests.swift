@@ -66,7 +66,7 @@ final class ErrorBannerTests: XCTestCase {
     func testOnlyTheEndOfTheSignInSaysSignInAgain() {
         ErrorBanner.shared.postSignedOut()
         XCTAssertEqual(ErrorBanner.shared.current?.kind, .error)
-        XCTAssertEqual(ErrorBanner.shared.current?.message, "Your session expired. Please sign in again.")
+        XCTAssertEqual(ErrorBanner.shared.current?.message, "You have been signed out. Please sign in again.")
     }
 
     /// An unknown failure is said in the app's words: the server's never
