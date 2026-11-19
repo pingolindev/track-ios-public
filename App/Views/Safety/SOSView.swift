@@ -53,24 +53,31 @@ struct SOSView: View {
                                 // signal would claim that it might.
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.title)
-                                // The disclaimer is IN the
-                                // label, not beside it: the
-                                // button is the last thing
-                                // read before the tap, and
-                                // "not emergency services"
-                                // is the one fact a person
-                                // in trouble must not learn
+                                // Two lines on the button
+                                // itself:
+                                // the action, then, smaller,
+                                // "Not emergency services".
+                                // The caveat is IN the label,
+                                // not beside it: the button
+                                // is the last thing read
+                                // before the tap, and this is
+                                // the one fact a person in
+                                // trouble must not learn
                                 // later. Hence the wrapping
                                 // allowances below: a fixed
-                                // 80pt frame would clip this
-                                // string, and clipped text
-                                // is exactly where the
+                                // 80pt frame would clip the
+                                // second line, and clipped
+                                // text is exactly where the
                                 // caveat gets lost.
-                                Text("Notify my circle - not emergency services")
-                                    .font(.title2)
-                                    .fontWeight(.semibold)
-                                    .multilineTextAlignment(.center)
-                                    .minimumScaleFactor(0.7)
+                                VStack(spacing: 2) {
+                                    Text("Notify my circle")
+                                        .font(.title2)
+                                        .fontWeight(.semibold)
+                                    Text("Not emergency services")
+                                        .font(.subheadline)
+                                }
+                                .multilineTextAlignment(.center)
+                                .minimumScaleFactor(0.7)
                             }
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
