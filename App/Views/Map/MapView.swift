@@ -2446,6 +2446,8 @@ struct QuickCheckInSheet: View {
     let circleId: String?
     @Environment(\.dismiss) private var dismiss
     @StateObject private var checkInManager = CheckInManager.shared
+    /// My own check-in rules: one about me in this circle shows its countdown.
+    @StateObject private var inactivityManager = InactivityAlertsManager.shared
     @State private var isLoading = false
 
     var body: some View {
@@ -2459,8 +2461,15 @@ struct QuickCheckInSheet: View {
                     Button(action: { sendCheckIn(.general) }) {
                         Label("General Check-in", systemImage: "hand.wave.fill")
                     }
+                } footer: {
+                    // Only with an active check-in rule about me in this
+                    // circle, and only on a read of mine that stood.
+                    if let countdown {
+                        CheckInCountdownLine(countdown: countdown)
+                    }
                 }
             }
+            .task { await refreshCountdown() }
             .navigationTitle("Check In")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -2470,6 +2479,22 @@ struct QuickCheckInSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    /// The countdown of my rule in the circle this sheet is for whose alert
+    /// comes soonest, if one of my rules counts down there (`CheckInCountdown`).
+    private var countdown: CheckInCountdown.Countdown? {
+        guard let circleId else { return nil }
+        return CheckInCountdown.soonest(circleId: circleId, alerts: inactivityManager.alerts,
+                                        mine: checkInManager.myCheckIns)
+    }
+
+    /// My rules, and my own check-ins in this circle from the server, as the
+    /// sheet opens.
+    private func refreshCountdown() async {
+        guard let circleId else { return }
+        await inactivityManager.refreshIfStale(maxAge: MonitoringManager.ruleListMaxAge)
+        await checkInManager.refreshMyCheckIns(for: inactivityManager.alerts, circleId: circleId)
     }
 
     private func sendCheckIn(_ type: CheckIn.CheckInType) {

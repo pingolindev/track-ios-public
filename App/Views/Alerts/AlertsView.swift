@@ -17,8 +17,9 @@
 
 import SwiftUI
 
-/// Unified Alerts screen: low-battery rules + inactivity alerts in one
-/// list, with a Battery/Inactivity chooser on create and tap-to-edit.
+/// Unified Alerts screen: low-battery rules + inactivity alerts (location and
+/// check-in) in one list, with a Battery/Inactivity/Check-in chooser on create
+/// and tap-to-edit.
 /// Mirrors the Android app's merged AlertsFragment +
 /// UnifiedAlertAdapter. History stays separate (the inactivity "Recent
 /// Triggers" section here is the iOS analog of the events inbox).
@@ -28,6 +29,9 @@ struct AlertsView: View {
     @StateObject private var circleManager = CircleManager.shared
     @StateObject private var localStore = LocalInactivityStore.shared
     @StateObject private var localBatteryStore = LocalBatteryStore.shared
+    /// This account's own check-ins, as the server has them: what the
+    /// countdown on its own check-in rules counts from.
+    @StateObject private var checkInManager = CheckInManager.shared
     /// Alerts and alert changes waiting for this iPhone to catch up.
     @ObservedObject private var pendingChanges = PendingChangeStore.shared
     private static let waitingKinds: Set<PendingChange.Kind> = [.batteryAlert, .alertChange, .inactivityAlert]
@@ -37,6 +41,11 @@ struct AlertsView: View {
 
     @State private var showingChooser = false
     @State private var editorMode: AlertEditorMode?
+    /// The watched people's past check-ins (`CheckInHistory`), read from the
+    /// server when the screen opens and on its refresh.
+    @State private var checkInHistory: [CheckInHistory.Entry] = []
+    /// False when some of them couldn't be read: one line says so.
+    @State private var checkInHistoryComplete = true
 
     /// One row model over both alert kinds so they sort/render together.
     private enum Row: Identifiable {
@@ -56,7 +65,12 @@ struct AlertsView: View {
     }
 
     private var isEmpty: Bool {
-        rows.isEmpty && localStore.events.isEmpty && localBatteryStore.events.isEmpty
+        rows.isEmpty && history.isEmpty && checkInHistoryComplete
+    }
+
+    /// The history: alert entries and past check-ins, newest first.
+    private var history: [CheckInHistory.Item] {
+        CheckInHistory.merged(lapses: localStore.events, batteries: localBatteryStore.events, checkIns: checkInHistory)
     }
 
     var body: some View {
@@ -80,11 +94,15 @@ struct AlertsView: View {
         .confirmationDialog("Create an alert", isPresented: $showingChooser, titleVisibility: .visible) {
             Button("Low battery") { editorMode = .createBattery }
             Button("Inactivity") { editorMode = .createInactivity }
+            Button(CheckInAlerts.typeName) { editorMode = .createCheckIn }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Alert your circle when a member's battery is low, or when they stop sending locations.")
+            Text("Alert your circle when a member's battery is low, they stop sending locations, or they don't check in.")
         }
-        .sheet(item: $editorMode) { mode in
+        .sheet(item: $editorMode, onDismiss: {
+            // A rule about me may have been made or turned back on.
+            Task { await checkInManager.refreshMyCheckIns(for: inactivityManager.alerts) }
+        }) { mode in
             NavigationStack { AlertEditorView(mode: mode) }
         }
     }
@@ -94,24 +112,33 @@ struct AlertsView: View {
         await localBatteryStore.loadIfNeeded()
         await ruleManager.refresh()
         await inactivityManager.refresh()
+        // From the server as the screen opens: a check-in waiting on this
+        // phone doesn't count, and one from my other devices does.
+        await checkInManager.refreshMyCheckIns(for: inactivityManager.alerts)
+        let past = await checkInManager.historyCheckIns(rules: inactivityManager.alerts)
+        checkInHistory = past.entries
+        checkInHistoryComplete = past.complete
     }
 
     private var list: some View {
         List {
-            if !localStore.events.isEmpty || !localBatteryStore.events.isEmpty {
-                Section("Recent Triggers") {
-                    // Device-local firings, with their exact
-                    // local time. There is no server-sourced
-                    // list to merge in: the server serves no
-                    // inactivity events, and battery firings
-                    // are local by construction: the level
-                    // is sealed in the payload, so the server
-                    // has no row to serve.
-                    ForEach(localStore.events) { event in
-                        localEventRow(event)
+            if !history.isEmpty || !checkInHistoryComplete {
+                Section("History") {
+                    // Device-local firings, with their exact local time (the
+                    // server serves no inactivity events, and battery firings
+                    // are local by construction: the level is sealed in the
+                    // payload), and the watched people's check-ins, read from
+                    // the server: one list, newest first.
+                    if !checkInHistoryComplete {
+                        Text(CheckInHistory.couldNotLoad)
+                            .font(.footnote).foregroundStyle(.secondary)
                     }
-                    ForEach(localBatteryStore.events) { event in
-                        localBatteryRow(event)
+                    ForEach(history) { item in
+                        switch item {
+                        case .lapse(let event): localEventRow(event)
+                        case .battery(let event): localBatteryRow(event)
+                        case .checkIn(let entry): checkInRow(entry)
+                        }
                     }
                 }
             }
@@ -166,17 +193,22 @@ struct AlertsView: View {
 
     @ViewBuilder
     private func inactivityRow(_ alert: InactivityAlertResponse) -> some View {
+        let checkIn = alert.watchKind == .checkIn
         alertRowShell(
-            icon: alert.isSelfAlert ? "person.crop.circle.badge.exclamationmark" : "eye",
-            tint: .blue,
+            icon: alert.isSelfAlert ? "person.crop.circle.badge.exclamationmark" : (checkIn ? "hand.wave" : "eye"),
+            // The inbox's check-in colour.
+            tint: checkIn ? .purple : .blue,
             active: alert.isActive,
             title: inactivityTitle(alert),
             circle: circleName(alert.circleId),
             subtitle: subtitle(
-                detail: "\(alert.timeoutHours)h timeout",
-                cooldown: alert.cooldownMinutes
+                detail: checkIn ? CheckInAlerts.summary(of: alert) : "\(alert.timeoutHours)h timeout",
+                // A scheduled rule wakes once per occurrence: no cooldown.
+                cooldown: alert.checkInKind == .scheduled ? nil : alert.cooldownMinutes
             ),
-            disabled: !alert.isActive
+            disabled: !alert.isActive,
+            countdown: CheckInCountdown.countdown(
+                of: alert, mine: checkInManager.myCheckIns[CanonicalId.key(alert.circleId)])
         )
         .contentShape(Rectangle())
         .onTapGesture { editorMode = .editInactivity(alert) }
@@ -188,6 +220,9 @@ struct AlertsView: View {
     }
 
     private func inactivityTitle(_ alert: InactivityAlertResponse) -> String {
+        if alert.watchKind == .checkIn {
+            return alert.isSelfAlert ? CheckInAlerts.aboutMeTitle : CheckInAlerts.typeName
+        }
         if alert.isSelfAlert { return "If I'm inactive" }
         // Client-only watch rule: encrypted_conditions holds the set.
         if alert.encryptedConditions != nil {
@@ -205,8 +240,11 @@ struct AlertsView: View {
         return parts.joined(separator: " • ")
     }
 
+    /// `countdown`: one of my own check-in rules' countdown, shown as its line
+    /// (`CheckInCountdownLine`).
     @ViewBuilder
-    private func alertRowShell(icon: String, tint: Color, active: Bool, title: String, circle: String?, subtitle: String, disabled: Bool) -> some View {
+    private func alertRowShell(icon: String, tint: Color, active: Bool, title: String, circle: String?, subtitle: String,
+                               disabled: Bool, countdown: CheckInCountdown.Countdown? = nil) -> some View {
         HStack(spacing: 12) {
             ZStack {
                 SwiftUI.Circle()
@@ -224,6 +262,9 @@ struct AlertsView: View {
                         .font(.caption).foregroundColor(.secondary)
                 )
                 Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                if let countdown {
+                    CheckInCountdownLine(countdown: countdown).font(.caption)
+                }
                 if disabled {
                     Text("Disabled").font(.caption2).foregroundStyle(.tertiary)
                 }
@@ -239,18 +280,25 @@ struct AlertsView: View {
     @ViewBuilder
     private func localEventRow(_ event: LocalInactivityEvent) -> some View {
         let resolved = event.isResolved
+        // Over, but nobody checked in (its rule was turned back on): not green.
+        let tint: Color = resolved ? (CheckInAlerts.closedWithoutCheckIn(event) ? .gray : .green) : .orange
         HStack(spacing: 12) {
             ZStack {
                 SwiftUI.Circle()
-                    .fill((resolved ? Color.green : Color.orange).opacity(0.15))
+                    .fill(tint.opacity(0.15))
                     .frame(width: 36, height: 36)
                 Image(systemName: resolved ? "checkmark" : "exclamationmark.triangle")
-                    .foregroundStyle(resolved ? .green : .orange)
+                    .foregroundStyle(tint)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(event.memberName) \(resolved ? "active again" : "inactive")")
+                Text(event.isMissedCheckIn
+                     ? CheckInAlerts.historyLine(event)
+                     : "\(event.memberName) \(resolved ? "active again" : "inactive")")
                     .font(.subheadline).fontWeight(.medium)
-                Text(localTriggerLabel(event.triggeredAt))
+                // A missed check-in keeps its words once over, marked as
+                // ended: the check-in that ended it is a row of its own.
+                Text(localTriggerLabel(event.triggeredAt)
+                     + (event.isMissedCheckIn && resolved ? " · \(CheckInAlerts.endedMark)" : ""))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -261,6 +309,33 @@ struct AlertsView: View {
                 localStore.delete(id: event.id)
             } label: { Label("Delete", systemImage: "trash") }
         }
+    }
+
+    /// A watched person's past check-in, or mine: "Ana checked in" / "You
+    /// checked in", the type unless it is the plain one, the time, the circle.
+    /// The check-in screens' own mark and colour for its type.
+    @ViewBuilder
+    private func checkInRow(_ entry: CheckInHistory.Entry) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                SwiftUI.Circle()
+                    .fill(entry.type.tint.opacity(0.15))
+                    .frame(width: 36, height: 36)
+                Image(systemName: entry.type.icon)
+                    .foregroundStyle(entry.type.tint)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                (
+                    Text(entry.title).font(.subheadline).fontWeight(.medium)
+                    + Text(circleName(entry.circleId).map { "  ·  \($0)" } ?? "")
+                        .font(.caption).foregroundColor(.secondary)
+                )
+                Text(([entry.typeLabel].compactMap { $0 } + [localTriggerLabel(entry.at)]).joined(separator: " · "))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 4)
     }
 
     /// A device-local low-battery firing. Resolved means they charged back
@@ -311,7 +386,7 @@ struct AlertsView: View {
                 .foregroundStyle(.secondary)
             Text("No alerts yet")
                 .font(.headline)
-            Text("Get notified when a circle member's battery runs low or they stop sending locations.")
+            Text("Get notified when a circle member's battery runs low, they stop sending locations, or they don't check in.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -327,6 +402,9 @@ struct AlertsView: View {
 enum AlertEditorMode: Identifiable {
     case createBattery
     case createInactivity
+    /// An inactivity rule that watches check-ins. Edited as `.editInactivity`:
+    /// the rule says what it watches.
+    case createCheckIn
     case editBattery(AlertRuleResponse)
     case editInactivity(InactivityAlertResponse)
 
@@ -334,6 +412,7 @@ enum AlertEditorMode: Identifiable {
         switch self {
         case .createBattery: return "create-battery"
         case .createInactivity: return "create-inactivity"
+        case .createCheckIn: return "create-check-in"
         case .editBattery(let r): return "edit-battery-\(r.id)"
         case .editInactivity(let a): return "edit-inactivity-\(a.id)"
         }
@@ -342,14 +421,23 @@ enum AlertEditorMode: Identifiable {
     var isBattery: Bool {
         switch self {
         case .createBattery, .editBattery: return true
-        case .createInactivity, .editInactivity: return false
+        case .createInactivity, .createCheckIn, .editInactivity: return false
         }
     }
 
     var isEditing: Bool {
         switch self {
         case .editBattery, .editInactivity: return true
-        case .createBattery, .createInactivity: return false
+        case .createBattery, .createInactivity, .createCheckIn: return false
+        }
+    }
+
+    /// A check-in rule: one being made, or one opened for editing.
+    var watchesCheckIns: Bool {
+        switch self {
+        case .createCheckIn: return true
+        case .editInactivity(let rule): return rule.watchKind == .checkIn
+        case .createBattery, .createInactivity, .editBattery: return false
         }
     }
 }
@@ -374,6 +462,14 @@ struct AlertEditorView: View {
     @State private var threshold: Double = Double(AlertRulesManager.defaultThreshold)
     // Inactivity
     @State private var timeoutHours: Double = 6
+    // Check-in: its kind, and a scheduled one's schedule (`CheckInSchedule`).
+    @State private var checkInKind: CheckInRuleKind = .once
+    @State private var scheduleDays = CheckInSchedule.everyDay
+    @State private var dueTime = AlertEditorView.time(minute: 21 * 60)
+    @State private var countsFromStartOfDay = true
+    @State private var fromTime = AlertEditorView.time(minute: 18 * 60)
+    @State private var followsPhone = true
+    @State private var chosenZone = TimeZone.autoupdatingCurrent.identifier
     // Common
     @State private var cooldownMinutes: Double = 60
     @State private var notifyPush = true
@@ -390,6 +486,15 @@ struct AlertEditorView: View {
         return !watchSelf
     }
 
+    /// A check-in rule's kind: chosen when made, the rule's own after.
+    private var editedKind: CheckInRuleKind {
+        if case .editInactivity(let rule) = mode { return rule.checkInKind ?? .once }
+        return checkInKind
+    }
+
+    /// Whether the rule is, or is being made, a scheduled check-in rule.
+    private var isScheduled: Bool { mode.watchesCheckIns && editedKind == .scheduled }
+
     var body: some View {
         Form {
             if mode.isEditing {
@@ -397,10 +502,22 @@ struct AlertEditorView: View {
                     Toggle("Active", isOn: $isActive)
                 }
             } else if !mode.isBattery {
+                if mode.watchesCheckIns {
+                    Section {
+                        Picker("Kind", selection: $checkInKind) {
+                            Text(CheckInAlerts.onceKindName).tag(CheckInRuleKind.once)
+                            Text(CheckInAlerts.scheduledKindName).tag(CheckInRuleKind.scheduled)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                }
                 Section {
                     Toggle("Alert about me", isOn: $watchSelf)
                 } footer: {
-                    Text("When on, fires if your own device stops sending locations. Otherwise choose who to watch below.")
+                    // A check-in rule says what it does under its first setting.
+                    if !mode.watchesCheckIns {
+                        Text("When on, fires if your own device stops sending locations. Otherwise choose who to watch below.")
+                    }
                 }
             }
 
@@ -432,16 +549,13 @@ struct AlertEditorView: View {
                 } footer: {
                     Text("Fires when the watched member's battery drops to this level.")
                 }
+            } else if mode.watchesCheckIns {
+                // No not-sharing note: a check-in goes out while paused, so a
+                // pause doesn't keep a check-in rule quiet.
+                checkInSections
             } else {
                 Section {
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text("Timeout")
-                            Spacer()
-                            Text("\(Int(timeoutHours)) hours").foregroundStyle(.secondary)
-                        }
-                        Slider(value: $timeoutHours, in: 1...24, step: 1)
-                    }
+                    timeoutSlider(label: "Timeout")
                 } footer: {
                     if watchesOthers {
                         Text(Self.notWhileNotSharing)
@@ -455,7 +569,8 @@ struct AlertEditorView: View {
             // evaluators fire once per drain against a persisted marker. Shown
             // for a battery rule it would be a dial whose value is stored and
             // never consulted.
-            if !mode.isBattery {
+            // Not on a scheduled check-in rule: it wakes once per occurrence.
+            if !mode.isBattery && !isScheduled {
                 Section {
                     VStack(alignment: .leading) {
                         HStack {
@@ -475,7 +590,8 @@ struct AlertEditorView: View {
             Section("Notifications") {
                 Toggle("Push", isOn: $notifyPush)
                 // Inactivity-only: also announce when the member resumes sharing.
-                if !mode.isBattery {
+                // Never on a check-in rule: the check-in itself tells the circle.
+                if !mode.isBattery && !mode.watchesCheckIns {
                     Toggle("Notify when back online", isOn: $notifyOnReturn)
                 }
             }
@@ -500,6 +616,91 @@ struct AlertEditorView: View {
             }
         }
         .onAppear(perform: prefill)
+    }
+
+    private func timeoutSlider(label: String) -> some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Text(label)
+                Spacer()
+                Text(Int(timeoutHours) == 1 ? "1 hour" : "\(Int(timeoutHours)) hours").foregroundStyle(.secondary)
+            }
+            Slider(value: $timeoutHours, in: 1...24, step: 1)
+        }
+    }
+
+    /// A check-in rule's own sections: a one-time rule's hours, or a scheduled
+    /// one's time, days, from time and zone. The first says what the rule does
+    /// (`CheckInAlerts.editorNote`).
+    @ViewBuilder
+    private var checkInSections: some View {
+        if isScheduled {
+            Section {
+                DatePicker("Check in by", selection: $dueTime, displayedComponents: .hourAndMinute)
+            } footer: {
+                Text(CheckInAlerts.editorNote(aboutMe: !watchesOthers, kind: .scheduled))
+            }
+            Section("Days") {
+                CheckInDayPicker(days: $scheduleDays)
+            }
+            Section {
+                Picker("Counting from", selection: $countsFromStartOfDay) {
+                    Text("Start of day").tag(true)
+                    Text("A time").tag(false)
+                }
+                if !countsFromStartOfDay {
+                    DatePicker("From", selection: $fromTime, displayedComponents: .hourAndMinute)
+                }
+            }
+            Section("Time zone") {
+                // About me, it follows this phone unless a zone is chosen;
+                // about someone else, it is this phone's zone unless changed.
+                if !watchesOthers {
+                    Toggle(CheckInAlerts.phoneTimeZone, isOn: $followsPhone)
+                }
+                if watchesOthers || !followsPhone {
+                    NavigationLink {
+                        TimeZonePickerView(selection: $chosenZone)
+                    } label: {
+                        LabeledContent("Time zone", value: CheckInSchedule.zoneName(chosenZone))
+                    }
+                }
+            }
+        } else {
+            Section {
+                timeoutSlider(label: "Check in within")
+            } footer: {
+                Text(CheckInAlerts.editorNote(aboutMe: !watchesOthers, kind: .once))
+            }
+        }
+    }
+
+    /// The schedule as the editor shows it.
+    private var scheduleChoice: CheckInScheduleChoice {
+        let follows = !watchesOthers && followsPhone
+        return CheckInScheduleChoice(
+            days: scheduleDays,
+            dueMinute: Self.minute(of: dueTime),
+            fromMinute: countsFromStartOfDay ? nil : Self.minute(of: fromTime),
+            timeZone: follows ? TimeZone.autoupdatingCurrent.identifier : chosenZone,
+            followsPhone: follows)
+    }
+
+    /// Whether a schedule can be saved: a day at least, and a from time before
+    /// the check-in time.
+    static func scheduleIsValid(_ choice: CheckInScheduleChoice) -> Bool {
+        choice.days & CheckInSchedule.everyDay != 0 && (choice.fromMinute.map { $0 < choice.dueMinute } ?? true)
+    }
+
+    /// A time picked in the editor, as minutes after midnight.
+    static func minute(of time: Date, calendar: Calendar = .current) -> Int {
+        let parts = calendar.dateComponents([.hour, .minute], from: time)
+        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+    }
+
+    /// Minutes after midnight as a time the editor's pickers show.
+    static func time(minute: Int, calendar: Calendar = .current) -> Date {
+        calendar.date(bySettingHour: minute / 60, minute: minute % 60, second: 0, of: Date()) ?? Date()
     }
 
     private var otherMembers: [CircleMember] {
@@ -545,13 +746,15 @@ struct AlertEditorView: View {
         switch mode {
         case .createBattery: return "Low Battery Alert"
         case .createInactivity: return "Inactivity Alert"
+        case .createCheckIn: return "Check-in Alert"
         case .editBattery: return "Edit Battery Alert"
-        case .editInactivity: return "Edit Inactivity Alert"
+        case .editInactivity(let a): return a.watchKind == .checkIn ? "Edit Check-in Alert" : "Edit Inactivity Alert"
         }
     }
 
     private var canSubmit: Bool {
         guard !isSubmitting else { return false }
+        if isScheduled, !Self.scheduleIsValid(scheduleChoice) { return false }
         if mode.isEditing { return true }
         guard circleManager.activeCircle != nil else { return false }
         if mode.isBattery { return selectedMemberId != nil }
@@ -573,9 +776,17 @@ struct AlertEditorView: View {
             isActive = a.isActive
             timeoutHours = Double(a.timeoutHours)
             notifyPush = Self.initialPush(notifyPush: a.notifyPush, notifyEmail: a.notifyEmail)
-            notifyOnReturn = a.notifyOnReturn ?? false
+            notifyOnReturn = a.watchKind == .checkIn ? false : (a.notifyOnReturn ?? false)
             cooldownMinutes = Double(a.cooldownMinutes)
-        case .createBattery, .createInactivity:
+            if let schedule = a.schedule {
+                scheduleDays = schedule.days
+                dueTime = Self.time(minute: schedule.dueMinute)
+                countsFromStartOfDay = schedule.fromMinute == nil
+                fromTime = Self.time(minute: schedule.fromMinute ?? 18 * 60)
+                followsPhone = a.scheduleTzFollowsPhone == true
+                chosenZone = schedule.timeZone.identifier
+            }
+        case .createBattery, .createInactivity, .createCheckIn:
             break
         }
     }
@@ -608,6 +819,14 @@ struct AlertEditorView: View {
                     r, isActive: isActive, threshold: Int(threshold),
                     notifyPush: channels.notifyPush, notifyEmail: channels.notifyEmail
                 )
+            case .editInactivity(let a) where a.checkInKind == .scheduled:
+                // Its schedule, as shown; no hours and no cooldown, which a
+                // scheduled rule doesn't use.
+                try await inactivityManager.updateAlert(
+                    a, isActive: isActive,
+                    notifyPush: channels.notifyPush, notifyEmail: channels.notifyEmail,
+                    schedule: scheduleChoice
+                )
             case .editInactivity(let a):
                 try await inactivityManager.updateAlert(
                     a, isActive: isActive, timeoutMinutes: Int(timeoutHours * 60),
@@ -620,7 +839,7 @@ struct AlertEditorView: View {
                     circleId: circle.id, targetUserId: target, threshold: Int(threshold),
                     notifyPush: channels.notifyPush, notifyEmail: channels.notifyEmail
                 )
-            case .createInactivity:
+            case .createInactivity, .createCheckIn:
                 guard let circle = circleManager.activeCircle else { return }
                 let target: InactivityAlertsManager.Target
                 if watchSelf {
@@ -631,7 +850,10 @@ struct AlertEditorView: View {
                     target = .members(Array(selectedMemberIds))
                 }
                 try await inactivityManager.createAlert(
-                    circleId: circle.id, target: target, timeoutMinutes: Int(timeoutHours * 60),
+                    circleId: circle.id, target: target,
+                    watches: mode.watchesCheckIns ? .checkIn : .location,
+                    schedule: isScheduled ? scheduleChoice : nil,
+                    timeoutMinutes: Int(timeoutHours * 60),
                     notifyPush: channels.notifyPush, notifyEmail: channels.notifyEmail,
                     cooldownMinutes: Int(cooldownMinutes), notifyOnReturn: notifyOnReturn
                 )

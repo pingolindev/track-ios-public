@@ -20,7 +20,8 @@ import Combine
 import PingolinTrackSDK
 
 /// Inactivity alerts: notify a circle when a target user hasn't sent a
-/// location for N hours. Mirrors the Android app's
+/// location for N hours, or, for a check-in rule (`watches`), hasn't checked
+/// in for N hours. Mirrors the Android app's
 /// InactivityAlertsViewModel and InactivityAlertRepository. The
 /// encrypted_target_user_id is the only E2EE field on this surface; the
 /// timeout is in plaintext hours for privacy-preserving server-side
@@ -36,6 +37,9 @@ final class InactivityAlertsManager: ObservableObject {
     /// evaluation pass reuse a recent list instead of re-fetching every 15
     /// minutes; any refresh (the Alerts screen, a create, an edit) renews it.
     private(set) var lastRefreshedAt: Date?
+    /// Whether `alerts` has come from the server since sign-in: before that,
+    /// an empty list says nothing about which rules exist.
+    private(set) var hasLoaded = false
 
     // Inactivity firings the device raised itself live in
     // `LocalInactivityStore`; the server serves no list of them.
@@ -53,6 +57,7 @@ final class InactivityAlertsManager: ObservableObject {
         alerts = []
         lastError = nil
         lastRefreshedAt = nil
+        hasLoaded = false
     }
 
     func refresh() async {
@@ -62,6 +67,7 @@ final class InactivityAlertsManager: ObservableObject {
             alerts = try await api.listInactivityAlerts()
             lastError = nil
             lastRefreshedAt = Date()
+            hasLoaded = true
         } catch {
             lastError = "Failed to load inactivity alerts: \(error.plainText)"
         }
@@ -109,10 +115,16 @@ final class InactivityAlertsManager: ObservableObject {
     /// While this iPhone is behind in the circle the alert waits and nil
     /// comes back. `waiting`: the waiting change being run now; each row it
     /// creates carries its own request id.
+    ///
+    /// `watches`: what counts as a sign of life, location updates or
+    /// check-ins. A check-in rule never has "back online" (the check-in is the
+    /// notice), so `notifyOnReturn` is dropped for one.
     @discardableResult
     func createAlert(
         circleId: String,
         target: Target,
+        watches: InactivityWatch = .location,
+        schedule: CheckInScheduleChoice? = nil,
         timeoutMinutes: Int,
         notifyPush: Bool = true,
         notifyEmail: Bool = false,
@@ -120,6 +132,13 @@ final class InactivityAlertsManager: ObservableObject {
         notifyOnReturn: Bool = false,
         waiting: PendingChange? = nil
     ) async throws -> InactivityAlertResponse? {
+        let notifyOnReturn = watches == .checkIn ? false : notifyOnReturn
+        // A check-in rule with a schedule is a scheduled one; without, a
+        // one-time one. A scheduled rule uses no hours (the server ignores
+        // them) and no cooldown (it wakes once per occurrence): 60 each.
+        let schedule = watches == .checkIn ? schedule : nil
+        let timeoutMinutes = schedule == nil ? timeoutMinutes : 60
+        let cooldownMinutes = schedule == nil ? cooldownMinutes : 60
         // Nothing new is sealed under a key the circle has moved past.
         do {
             try CircleManager.shared.requireCurrentKey(for: circleId)
@@ -134,7 +153,8 @@ final class InactivityAlertsManager: ObservableObject {
                 inputs: .inactivityAlert(.init(
                     memberIds: memberIds, everyone: { if case .everyone = target { return true } else { return false } }(),
                     timeoutMinutes: timeoutMinutes, notifyPush: notifyPush, notifyEmail: notifyEmail,
-                    cooldownMinutes: cooldownMinutes, notifyOnReturn: notifyOnReturn)),
+                    cooldownMinutes: cooldownMinutes, notifyOnReturn: notifyOnReturn,
+                    watches: watches == .checkIn ? watches.rawValue : nil, schedule: schedule)),
                 member: memberIds?.first.flatMap { id in
                     CircleManager.shared.members[circleId]?.first { $0.userId == id }?.displayName
                 })
@@ -186,10 +206,11 @@ final class InactivityAlertsManager: ObservableObject {
         // throwing mid-loop, so the batch always completes and refresh() always
         // runs before any error is surfaced. (Self-alerts are excluded: `me` is
         // never in watchedUserIds for the fan-out, and a user may keep more than
-        // one self-rule per circle.)
+        // one self-rule per circle.) Per kind: a member watched for location
+        // can still be watched for check-ins, and the other way round.
         let alreadyWatched: Set<String> = Set(
             alerts
-                .filter { $0.circleId == circleId && $0.isActive && !$0.isSelfAlert }
+                .filter { $0.circleId == circleId && $0.isActive && !$0.isSelfAlert && $0.watchKind == watches }
                 .compactMap { existing in
                     try? cryptoManager.decryptData(
                         circleId: existing.circleId,
@@ -210,7 +231,7 @@ final class InactivityAlertsManager: ObservableObject {
                 // location rows and evaluate the rule without learning the raw
                 // id (encrypted_target_user_id stays the E2EE round-trip field).
                 let pseudonym = try cryptoManager.deriveUserPseudonym(circleId: circleId, userId: userId)
-                let request = CreateInactivityAlertRequest(
+                var request = CreateInactivityAlertRequest(
                     circleId: circleId,
                     targetUserId: userId,
                     encryptedTargetUserId: EncryptedBlobRequest(
@@ -228,13 +249,27 @@ final class InactivityAlertsManager: ObservableObject {
                     // drops it (no client-side double-fire).
                     encryptedConditions: nil,
                     clientOnly: false,
+                    // A check-in rule cannot exist without it: the server
+                    // finds the member's check-ins by it alone.
                     targetUserPseudonym: pseudonym,
                     // Days since epoch: REQUIRED by the backend (matches the
                     // place-alert / SOS day-bucket convention).
                     dayBucket: dayBucket,
                     notifyOnReturn: notifyOnReturn,
-                    clientRequestId: waiting?.requestId(for: userId)
+                    clientRequestId: waiting?.requestId(for: userId),
+                    // Absent for a location rule, as from every older app.
+                    watches: watches == .checkIn ? watches.rawValue : nil
                 )
+                if watches == .checkIn {
+                    // Its kind (migration 197), and a scheduled one's schedule.
+                    request.checkInMode = (schedule == nil ? CheckInRuleKind.once : .scheduled).rawValue
+                    request.scheduleDays = schedule?.days
+                    request.scheduleDueMinute = schedule?.dueMinute
+                    request.scheduleFromMinute = schedule?.fromMinute
+                    request.scheduleTz = schedule?.timeZone
+                    // Only a rule about me may follow the phone.
+                    request.scheduleTzFollowsPhone = schedule.map { $0.followsPhone && isSelfAlert }
+                }
                 // Create returns only the new id; re-fetch below for the full row.
                 lastCreatedId = try await api.createInactivityAlert(request: request)
             } catch {
@@ -284,9 +319,10 @@ final class InactivityAlertsManager: ObservableObject {
         )
     }
 
-    /// Partial update: pass only what changed (active toggle, timeout,
+    /// Partial update. Pass only what changed (active toggle, timeout,
     /// notify prefs, cooldown). Used by the unified Alerts editor's
-    /// tap-to-edit. Re-fetches for the updated row.
+    /// tap-to-edit. Re-fetches for the updated row. A rule's kind never
+    /// changes, and a check-in rule is sent no "back online" choice.
     func updateAlert(
         _ alert: InactivityAlertResponse,
         isActive: Bool? = nil,
@@ -294,18 +330,52 @@ final class InactivityAlertsManager: ObservableObject {
         notifyPush: Bool? = nil,
         notifyEmail: Bool? = nil,
         cooldownMinutes: Int? = nil,
-        notifyOnReturn: Bool? = nil
+        notifyOnReturn: Bool? = nil,
+        schedule: CheckInScheduleChoice? = nil
     ) async throws {
-        let request = UpdateInactivityAlertRequest(
+        var request = UpdateInactivityAlertRequest(
             timeoutMinutes: timeoutMinutes,
             isActive: isActive,
             notifyPush: notifyPush,
             notifyEmail: notifyEmail,
             cooldownMinutes: cooldownMinutes,
             encryptedConditions: nil,
-            notifyOnReturn: notifyOnReturn
+            notifyOnReturn: alert.watchKind == .checkIn ? nil : notifyOnReturn
         )
+        // A scheduled rule's whole schedule, as the editor shows it. Its kind
+        // never changes, so a one-time rule sends none.
+        if let schedule, alert.checkInKind == .scheduled {
+            request.scheduleDays = schedule.days
+            request.scheduleDueMinute = schedule.dueMinute
+            request.scheduleFromMinute = schedule.fromMinute.map(ScheduleFromUpdate.minute) ?? .startOfDay
+            request.scheduleTz = schedule.timeZone
+            request.scheduleTzFollowsPhone = schedule.followsPhone && alert.isSelfAlert
+        }
         _ = try await api.updateInactivityAlert(alertId: alert.id, request: request)
+        await refresh()
+    }
+
+    /// This account's own scheduled rules about itself that follow the phone
+    /// and aren't in `zone` (`followPhoneTimeZone`).
+    nonisolated static func rulesToMove(_ alerts: [InactivityAlertResponse], to zone: String) -> [InactivityAlertResponse] {
+        alerts.filter { $0.checkInKind == .scheduled && $0.isSelfAlert && $0.scheduleTzFollowsPhone == true
+            && $0.scheduleTz != zone }
+    }
+
+    /// Keep the rules that follow the phone in its zone: on start, on coming
+    /// to the foreground and when the phone's zone changes. Each sends only
+    /// its new `schedule_tz`.
+    func followPhoneTimeZone(_ zone: String = TimeZone.autoupdatingCurrent.identifier) async {
+        await refreshIfStale(maxAge: MonitoringManager.ruleListMaxAge)
+        let moving = Self.rulesToMove(alerts, to: zone)
+        guard !moving.isEmpty else { return }
+        for rule in moving {
+            var request = UpdateInactivityAlertRequest(
+                timeoutMinutes: nil, isActive: nil, notifyPush: nil, notifyEmail: nil, cooldownMinutes: nil,
+                encryptedConditions: nil, notifyOnReturn: nil)
+            request.scheduleTz = zone
+            _ = try? await api.updateInactivityAlert(alertId: rule.id, request: request)
+        }
         await refresh()
     }
 

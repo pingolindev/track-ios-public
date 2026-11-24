@@ -72,14 +72,17 @@ final class NotificationsManager: ObservableObject {
     /// Device-local inactivity firings surface in the bell alongside server
     /// rows (they're client_only: the server can't record them). They use a
     /// "local-" id so mark-read / dismiss route to LocalInactivityStore and
-    /// skip the (404-ing) server round-trip. Mirrors android.
-    private static func localRow(_ e: LocalInactivityEvent) -> NotificationResponse {
+    /// skip the (404-ing) server round-trip. Mirrors android. A missed
+    /// check-in is its own type ("missed_check_in"), in the notification's words.
+    static func localRow(_ e: LocalInactivityEvent) -> NotificationResponse {
         NotificationResponse(
             id: e.id,
             circleId: e.circleId,
-            notificationType: "inactivity_alert",
-            title: "Inactivity alert",
-            body: "\(e.memberName) hasn't sent a location recently",
+            notificationType: e.isMissedCheckIn ? CheckInAlerts.alertEventType : "inactivity_alert",
+            title: e.isMissedCheckIn ? CheckInAlerts.missedTitle : "Inactivity alert",
+            body: e.isMissedCheckIn
+                ? CheckInAlerts.missedBody(name: e.memberName, hours: e.timeoutHours ?? 1, dueMinute: e.dueMinute)
+                : "\(e.memberName) hasn't sent a location recently",
             metadata: nil,
             isRead: e.isRead,
             createdDayBucket: Int(e.triggeredAt.timeIntervalSince1970 / 86_400),

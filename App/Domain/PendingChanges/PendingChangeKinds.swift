@@ -722,7 +722,10 @@ struct InactivityAlertKind: PendingChangeHandler {
             target = .selfUser
         }
         _ = try await InactivityAlertsManager.shared.createAlert(
-            circleId: change.circleId, target: target, timeoutMinutes: inputs.timeoutMinutes,
+            circleId: change.circleId, target: target,
+            watches: inputs.watches.flatMap(InactivityWatch.init(rawValue:)) ?? .location,
+            schedule: inputs.schedule,
+            timeoutMinutes: inputs.timeoutMinutes,
             notifyPush: inputs.notifyPush, notifyEmail: inputs.notifyEmail, cooldownMinutes: inputs.cooldownMinutes,
             notifyOnReturn: inputs.notifyOnReturn, waiting: change)
     }

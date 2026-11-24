@@ -55,10 +55,10 @@ struct CheckInHistoryView: View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
                 SwiftUI.Circle()
-                    .fill(typeColor(row.type).opacity(0.15))
+                    .fill(row.type.tint.opacity(0.15))
                     .frame(width: 36, height: 36)
                 Image(systemName: row.type.icon)
-                    .foregroundStyle(typeColor(row.type))
+                    .foregroundStyle(row.type.tint)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.type.displayName)
@@ -91,14 +91,6 @@ struct CheckInHistoryView: View {
         }
     }
 
-    private func typeColor(_ type: CheckIn.CheckInType) -> Color {
-        switch type {
-        case .safeArrival: return .green
-        case .general: return .blue
-        case .emergencyOk: return .mint
-        }
-    }
-
     private func load() async {
         guard let circle = circleManager.activeCircle else {
             loadError = "Pick an active circle from the Circles tab first."
@@ -113,6 +105,18 @@ struct CheckInHistoryView: View {
             loadError = nil
         } catch {
             loadError = "Couldn't load check-in history: \(error.plainText)"
+        }
+    }
+}
+
+extension CheckIn.CheckInType {
+    /// A check-in's colour by its type, wherever one is listed: this screen
+    /// and the Alerts history.
+    var tint: Color {
+        switch self {
+        case .safeArrival: return .green
+        case .general: return .blue
+        case .emergencyOk: return .mint
         }
     }
 }

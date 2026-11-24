@@ -21,7 +21,7 @@ import UIKit
 import UserNotifications
 
 /// Own-battery reporting and the client-side evaluation of watch-a-member
-/// battery and inactivity rules (E2EE compliant: client-side only).
+/// battery, inactivity and check-in rules (E2EE compliant, client-side only).
 ///
 /// There is no global on/off here: both alert kinds are governed in the
 /// circle's permissions: `share_battery` (the per-circle "Share Battery
@@ -276,18 +276,26 @@ final class MonitoringManager: ObservableObject {
         circleSelfAlertsFetchedAt = nil
     }
 
-    /// A return to the foreground: rules may have been edited on another device.
+    /// A return to the foreground: rules may have been edited on another device,
+    /// and the phone may be in another time zone.
     func noteForeground() {
         invalidateRuleLists()
+        Task { await InactivityAlertsManager.shared.followPhoneTimeZone() }
     }
 
+    /// The system's time-zone-change observer (`startInactivityWatch`).
+    private var timeZoneObserver: NSObjectProtocol?
+
     /// The `alerts_check` push: the server noticed a silence and is asking this
-    /// device to look. Fresh lists, then one pass across the three families.
+    /// device to look. Fresh lists, then one pass across every family.
     func evaluateForAlertsCheck() async {
         invalidateRuleLists()
         await runPass {
             await evaluateInactivityAlerts()
             await evaluateCircleSelfAlerts()
+            // Reads every circle with a check-in rule: the push may also mean
+            // that someone checked in, which takes back a stale alert.
+            await evaluateCheckInAlerts(readEveryCircle: true)
             await evaluateBatteryAlerts()
         }
     }
@@ -318,13 +326,30 @@ final class MonitoringManager: ObservableObject {
                 Task { @MainActor in await self?.evaluateInactivityAlertsThrottled() }
             }
             .store(in: &inactivityCancellables)
-        Task { await refreshAndEvaluate() }
+        // The scheduled rules about me that follow the phone keep its zone:
+        // now, and whenever the phone's zone changes.
+        if timeZoneObserver == nil {
+            timeZoneObserver = NotificationCenter.default.addObserver(
+                forName: .NSSystemTimeZoneDidChange, object: nil, queue: .main
+            ) { _ in
+                NSTimeZone.resetSystemTimeZone()
+                Task { @MainActor in await InactivityAlertsManager.shared.followPhoneTimeZone() }
+            }
+        }
+        Task {
+            await InactivityAlertsManager.shared.followPhoneTimeZone()
+            await refreshAndEvaluate()
+        }
     }
 
     func stopInactivityWatch() {
         watchEvalTimer?.invalidate()
         watchEvalTimer = nil
         watchStarted = false
+        if let timeZoneObserver {
+            NotificationCenter.default.removeObserver(timeZoneObserver)
+        }
+        timeZoneObserver = nil
     }
 
     private func timerTick() async {
@@ -349,6 +374,9 @@ final class MonitoringManager: ObservableObject {
     private func refreshAndEvaluatePass() async {
         await evaluateInactivityAlerts()
         await evaluateCircleSelfAlerts()
+        // Reads a circle's check-ins only where a rule is about to go off or a
+        // lapse is open (`CheckInAlerts.backgroundPassReads`).
+        await evaluateCheckInAlerts(readEveryCircle: false)
         // Place alerts ride the same pass. Inactivity, circle-self and battery all
         // evaluate here off the background location residency this loop exists to
         // exploit; left to `BGAppRefresh` alone (hourly floor, "typically after
@@ -432,6 +460,8 @@ final class MonitoringManager: ObservableObject {
 
     private func evaluateInactivityAlertsThrottledPass() async {
         await evaluateInactivityAlerts()
+        // As on the timer's pass: no request unless something is due.
+        await evaluateCheckInAlerts(readEveryCircle: false)
         // The location-wake half of the pass, and the more valuable half for place
         // alerts: this fires while the user is MOVING, which is when a watched
         // member's crossing is worth hearing about promptly. The 900 s timer is the
@@ -459,7 +489,12 @@ final class MonitoringManager: ObservableObject {
         // no target (it only notices silence and wakes us), so a rule skipped
         // here is a rule nothing fires. Rules without a spec watch their
         // single encrypted target; watchSpec falls back to it.
-        let rules = inactivity.alerts.filter { $0.isActive && !$0.isSelfAlert }
+        //
+        // Location rules only. A check-in rule is judged by check-ins
+        // (`evaluateCheckInAlerts`): judged here it would go off when location
+        // stops and never when check-ins do. A kind this version doesn't know
+        // is judged by neither.
+        let rules = inactivity.alerts.filter { $0.isActive && !$0.isSelfAlert && $0.watchKind == .location }
         guard !rules.isEmpty else { return }   // nothing client-side to fire
 
         let now = Date()
@@ -749,22 +784,10 @@ final class MonitoringManager: ObservableObject {
         let store = LocalInactivityStore.shared
         await store.loadIfNeeded()
 
-        let alerts: [CircleSelfAlertResponse]
-        if let cached = cachedCircleSelfAlerts,
-           !InactivityAlertsManager.isStale(
-               lastRefreshedAt: circleSelfAlertsFetchedAt, maxAge: Self.ruleListMaxAge, now: Date()) {
-            alerts = cached
-        } else {
-            do {
-                alerts = try await APIService.shared.listCircleSelfAlerts()
-                cachedCircleSelfAlerts = alerts
-                circleSelfAlertsFetchedAt = Date()
-            } catch {
-                // A network blip must not read as "nobody asked".
-                print("[Track] circle self-alerts fetch failed: \(error)")
-                return
-            }
-        }
+        // Requests to be watched for location. One to be watched for check-ins
+        // is judged by check-ins (`evaluateCheckInAlerts`).
+        guard let fetched = await circleSelfAlerts() else { return }
+        let alerts = fetched.filter { $0.watchKind == .location }
         guard !alerts.isEmpty else { return }
 
         let now = Date()
@@ -827,6 +850,202 @@ final class MonitoringManager: ObservableObject {
                 }
             }
         }
+    }
+
+    /// The circle-mates' requests to be watched, of every kind, reused for up
+    /// to `ruleListMaxAge` (see `evaluateCircleSelfAlerts`). nil when the fetch
+    /// failed: a network blip must not read as "nobody asked".
+    private func circleSelfAlerts() async -> [CircleSelfAlertResponse]? {
+        if let cached = cachedCircleSelfAlerts,
+           !InactivityAlertsManager.isStale(
+               lastRefreshedAt: circleSelfAlertsFetchedAt, maxAge: Self.ruleListMaxAge, now: Date()) {
+            return cached
+        }
+        do {
+            let alerts = try await APIService.shared.listCircleSelfAlerts()
+            cachedCircleSelfAlerts = alerts
+            circleSelfAlertsFetchedAt = Date()
+            return alerts
+        } catch {
+            print("[Track] circle self-alerts fetch failed: \(error)")
+            return nil
+        }
+    }
+
+    // MARK: - Check-in rules (no check-in in time)
+
+    /// Each circle's check-ins as a pass last read them, by the circle's id in
+    /// its one form: what a background pass judges first.
+    private var checkInReads: [String: CheckInAlerts.Read] = [:]
+
+    /// Judge the check-in rules: this account's own rules about others, and
+    /// the circle-mates' requests to be watched for check-ins. A one-time rule
+    /// goes off when its member hasn't checked in within its timeout of its
+    /// arming, and ends at their first check-in after it
+    /// (`CheckInAlerts.decide`); a scheduled one when they haven't checked in
+    /// by its time of day (`CheckInAlerts.decideScheduled`).
+    ///
+    /// Every alert raised here stands on a read of that circle's check-ins in
+    /// this same pass, and a read that fails raises nothing in the circle: a
+    /// failed read is not "no check-in". Ending a lapse needs no read: a re-arm
+    /// in the rule list, or a check-in already held, ends one on any pass
+    /// (`CheckInAlerts.passActions`). `readEveryCircle` is the `alerts_check`
+    /// wake, which reads every circle with a rule. The background passes read
+    /// only where their last read says something is due
+    /// (`CheckInAlerts.backgroundPassReads`), so a quiet night costs nothing.
+    ///
+    /// A member who paused sharing, or turned real-time off, is still judged: a
+    /// check-in goes out without a position. Once per lapse, against the same
+    /// store as the inactivity rules (keyed by rule and member). A lapse ends
+    /// at a check-in after it began, when the rule is armed again or a newer
+    /// occurrence comes due, or when the rule is no longer judged here.
+    func evaluateCheckInAlerts(readEveryCircle: Bool) async {
+        let store = LocalInactivityStore.shared
+        await store.loadIfNeeded()
+        let inactivity = InactivityAlertsManager.shared
+        await inactivity.refreshIfStale(maxAge: Self.ruleListMaxAge)
+
+        let own = inactivity.alerts.filter {
+            $0.isActive && !$0.isSelfAlert && CheckInAlerts.judgeable(kind: $0.checkInKind, schedule: $0.schedule)
+        }
+        // A failed fetch of the requests leaves them out of this pass only.
+        let fetchedRequests = await circleSelfAlerts()
+        let requests = (fetchedRequests ?? []).filter {
+            CheckInAlerts.judgeable(kind: $0.checkInKind, schedule: $0.schedule)
+        }
+        // Before anything else: lapses of rules no longer judged here end,
+        // whether or not any rule is left to judge.
+        endLapsesNoLongerJudged(judged: Set((own.map(\.id) + requests.map(\.id)).map(CanonicalId.key)),
+                                ownRules: inactivity.hasLoaded ? Set(inactivity.alerts.map { CanonicalId.key($0.id) }) : nil,
+                                requests: fetchedRequests.map { Set($0.map { CanonicalId.key($0.id) }) })
+        guard !own.isEmpty || !requests.isEmpty else { return }
+
+        let selfId = AuthManager.shared.userId
+        let circleManager = CircleManager.shared
+        var rules: [CheckInAlerts.Rule] = []
+        for alert in own {
+            // A target that doesn't open skips the rule rather than guessing
+            // whom it is about.
+            guard let spec = inactivity.watchSpec(for: alert) else { continue }
+            let watched = spec == "all" || spec.isEmpty
+                ? (circleManager.members[alert.circleId] ?? []).map { $0.userId }
+                : spec.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            rules.append(CheckInAlerts.Rule(
+                id: alert.id, circleId: alert.circleId, timeoutHours: alert.timeoutHours,
+                armedAt: alert.armedAtDate ?? store.firstStored(ruleId: alert.id),
+                memberIds: watched, isTheirRequest: false, schedule: alert.schedule))
+        }
+        for request in requests {
+            rules.append(CheckInAlerts.Rule(
+                id: request.id, circleId: request.circleId, timeoutHours: request.timeoutHours,
+                armedAt: request.armedAtDate ?? store.firstStored(ruleId: request.id),
+                memberIds: [request.userId], isTheirRequest: true, schedule: request.schedule))
+        }
+
+        for circleKey in Set(rules.map { CanonicalId.key($0.circleId) }) {
+            let circleRules = rules.filter { CanonicalId.key($0.circleId) == circleKey }
+            guard let circleId = circleRules.first?.circleId else { continue }
+            let members = circleManager.members[circleId] ?? []
+            // "Allow alerts on me", where this device has seen it: this
+            // circle's own row of each member, as the inactivity pass reads it.
+            var consent: [String: Bool] = [:]
+            for member in members {
+                if let allows = circleManager.acceptedRow(of: member.userId, in: circleId)?.allowAlertsOnMe {
+                    consent[CanonicalId.key(member.userId)] = allows
+                }
+            }
+            let reads = readEveryCircle || CheckInAlerts.backgroundPassReads(
+                rules: circleRules, members: members, consent: consent, selfId: selfId,
+                last: checkInReads[circleKey], openLapses: store.openCheckInLapses, now: Date())
+
+            // This pass's read: nil when it didn't read, or when the read failed
+            // (a page that didn't come, or a check-in inside the window that
+            // didn't open here). Then nothing is raised, since a failed read is
+            // not "no check-in", but a lapse the rules and the last read that
+            // stood already end (a re-arm, a check-in held) ends now.
+            var fresh: [String: Date]?
+            if reads {
+                // Back to the window of each scheduled rule's latest occurrence
+                // too, which a weekly pattern puts days back.
+                fresh = try? await CheckInManager.shared.newestCheckIns(
+                    circleId: circleId, from: CheckInAlerts.readFrom(circleRules, now: Date()))
+            }
+            let now = Date()
+            if let fresh {
+                checkInReads[circleKey] = CheckInAlerts.Read(at: now, newest: fresh)
+            }
+            let actions = CheckInAlerts.passActions(
+                rules: circleRules, members: members, consent: consent, selfId: selfId,
+                fresh: fresh, held: checkInReads[circleKey]?.newest, openLapses: store.openCheckInLapses, now: now)
+            for action in actions {
+                switch action {
+                case .resolve(let ruleId, let userId, let checkedIn):
+                    if store.resolveMissedCheckIn(ruleId: ruleId, userId: userId, checkedIn: checkedIn) {
+                        cancelMissedCheckInNotification(ruleId: ruleId, userId: userId)
+                    }
+                case .raise(let ruleId, let userId, let name, let since, let hours, let dueMinute):
+                    // Checked again after the read's await: another pass may
+                    // have raised it meanwhile.
+                    guard !store.hasUnresolved(ruleId: ruleId, userId: userId) else { continue }
+                    store.record(
+                        ruleId: ruleId, circleId: circleId, userId: userId, memberName: name,
+                        triggeredAt: now, watches: InactivityWatch.checkIn.rawValue,
+                        lapseSince: since, timeoutHours: hours, dueMinute: dueMinute
+                    )
+                    notifyMissedCheckIn(ruleId: ruleId, userId: userId, name: name, hours: hours, dueMinute: dueMinute)
+                    await reportAlertEvent(
+                        ruleId: ruleId, targetUserId: userId,
+                        alertType: CheckInAlerts.alertEventType, triggeredAt: now
+                    )
+                }
+            }
+        }
+    }
+
+    /// End the open missed check-ins whose rule this device no longer judges
+    /// (`CheckInAlerts.lapsesNoLongerJudged`), and take back their
+    /// notifications. A rule that ended, was turned off or deleted, or a
+    /// request that's gone: no check-in is known to have ended it.
+    private func endLapsesNoLongerJudged(judged: Set<String>, ownRules: Set<String>?, requests: Set<String>?) {
+        let store = LocalInactivityStore.shared
+        for event in CheckInAlerts.lapsesNoLongerJudged(store.openMissedCheckIns, judged: judged,
+                                                         ownRules: ownRules, requests: requests)
+        where store.resolveMissedCheckIn(ruleId: event.ruleId, userId: event.userId, checkedIn: false) {
+            cancelMissedCheckInNotification(ruleId: event.ruleId, userId: event.userId)
+        }
+    }
+
+    /// Stable per-(rule, member) id, distinct from the inactivity one so a
+    /// member who is both quiet and hasn't checked in gets one of each.
+    private func missedCheckInNotificationId(ruleId: String, userId: String) -> String {
+        "missed-check-in-\(ruleId)-\(userId)"
+    }
+
+    private func notifyMissedCheckIn(ruleId: String, userId: String, name: String, hours: Int, dueMinute: Int?) {
+        let content = UNMutableNotificationContent()
+        content.title = CheckInAlerts.missedTitle
+        // Same detail-level gate as notifyInactive: `name` is a DECRYPTED
+        // display name. No place or message content, so the names-only string
+        // is also the detailed one.
+        let detailed = CheckInAlerts.missedBody(name: name, hours: hours, dueMinute: dueMinute)
+        content.body = NotificationDetailLevel.resolveBody(detailed: detailed, namesOnly: detailed)
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: missedCheckInNotificationId(ruleId: ruleId, userId: userId),
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("[Track] notifyMissedCheckIn add() failed: \(error)")
+            }
+        }
+    }
+
+    private func cancelMissedCheckInNotification(ruleId: String, userId: String) {
+        let id = missedCheckInNotificationId(ruleId: ruleId, userId: userId)
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
     }
 
     /// Stable per-(rule, member) id, distinct from the inactivity one so a
@@ -948,6 +1167,7 @@ final class MonitoringManager: ObservableObject {
         lastTimerPassAt = nil
         cachedCircleSelfAlerts = nil
         circleSelfAlertsFetchedAt = nil
+        checkInReads = [:]
         // Otherwise the next account inherits account A's "already reported at
         // this level" marker and stays silent through its own first drain.
         lastReportedBatteryLevel = nil

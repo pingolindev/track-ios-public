@@ -288,6 +288,12 @@ struct PendingChange: Codable, Equatable, Identifiable {
         var notifyEmail: Bool
         var cooldownMinutes: Int
         var notifyOnReturn: Bool
+        /// "check_in" for a check-in rule; nil for a location rule, and in
+        /// every change queued before check-in rules.
+        var watches: String? = nil
+        /// A scheduled check-in rule's schedule; nil for a one-time one, and
+        /// in every change queued before scheduled rules.
+        var schedule: CheckInScheduleChoice? = nil
     }
 
     struct InviteInputs: Codable, Equatable {

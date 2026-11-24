@@ -1579,9 +1579,63 @@ actor APIService {
     /// throw happens BEFORE the assignment, so the published list would stay
     /// empty and the Alerts screen would show no inactivity rule the user had
     /// ever created.
+    ///
+    /// Every rule, every page: the route pages by cursor (day_bucket, id), at
+    /// most 100 a page. A list that leaves some out must never read as "these
+    /// are gone", so one whose pages don't end is an error, never a list.
+    /// Every page asks for the check-in rules too (`inactivityAlertsPath`).
     func listInactivityAlerts() async throws -> [InactivityAlertResponse] {
-        return try await get(path: "/api/v1/inactivity-alerts")
+        var all: [InactivityAlertResponse] = []
+        var seen = Set<String>()
+        var cursorDayBucket: Int?
+        var cursorId: String?
+        for _ in 0..<Self.inactivityAlertsMaxPages {
+            let page: [InactivityAlertResponse] = try await get(path: Self.inactivityAlertsPath(
+                limit: Self.inactivityAlertsPageSize, cursorDayBucket: cursorDayBucket, cursorId: cursorId))
+            for alert in page where seen.insert(CanonicalId.key(alert.id)).inserted {
+                all.append(alert)
+            }
+            guard page.count >= Self.inactivityAlertsPageSize, let last = page.last else { return all }
+            cursorDayBucket = last.dayBucket
+            cursorId = last.id
+        }
+        throw APIError(code: "incomplete_list", message: "The list is longer than this app reads")
     }
+
+    nonisolated static let inactivityAlertsPageSize = 100
+    nonisolated static let inactivityAlertsMaxPages = 20
+
+    /// The check-in rule kinds this version reads (`check_in_modes`, migration
+    /// 197). A kind left out of the list is left out of the answer, so an
+    /// app that can't judge a scheduled rule never gets one.
+    nonisolated static let checkInModes = "once,scheduled"
+
+    /// Path + query for one page of the account's inactivity alert rules.
+    ///
+    /// `include_check_in=true` and `check_in_modes` on EVERY page: without the
+    /// first the server leaves the check-in rules out (migration 196), because
+    /// the app versions that don't send it judge every rule they get by
+    /// location updates; without the second it sends the one-time ones only.
+    /// Pure, so the query is testable without a network.
+    nonisolated static func inactivityAlertsPath(
+        limit: Int,
+        cursorDayBucket: Int? = nil,
+        cursorId: String? = nil
+    ) -> String {
+        var query = "include_check_in=true&check_in_modes=\(Self.checkInModes)&limit=\(limit)"
+        if let cursorDayBucket {
+            query += "&cursor_day_bucket=\(cursorDayBucket)"
+        }
+        if let cursorId {
+            query += "&cursor_id=\(Self.queryValue(cursorId))"
+        }
+        return "/api/v1/inactivity-alerts?\(query)"
+    }
+
+    /// The circle-mates' "watch me" requests, check-in ones included (see
+    /// `inactivityAlertsPath`). One answer of at most 200, no pages.
+    nonisolated static let circleSelfAlertsPath =
+        "/api/v1/inactivity-alerts/circle-self-alerts?include_check_in=true&check_in_modes=\(checkInModes)"
 
     /// Returns only the new alert's id: the backend create responds with
     /// a bare id, not the full row (decoding it as the full
@@ -1625,7 +1679,7 @@ actor APIService {
 
     /// The self-alerts other members of my circles have asked me to watch.
     func listCircleSelfAlerts() async throws -> [CircleSelfAlertResponse] {
-        return try await get(path: "/api/v1/inactivity-alerts/circle-self-alerts")
+        return try await get(path: Self.circleSelfAlertsPath)
     }
 
     /// Ask the server to wake the people holding alert rules in this circle.
@@ -4345,6 +4399,77 @@ struct InactivityAlertResponse: Codable {
     /// Opt-in "back online" alert: fire when a flagged member resumes sharing.
     /// Optional so decoding tolerates an older backend that does not send it.
     let notifyOnReturn: Bool?
+    /// What the rule counts as a sign of life: "location" or "check_in"
+    /// (migration 196). Read through `watchKind`. Absent from an older
+    /// backend, whose rules all watch location.
+    let watches: String?
+    /// Check-in rules: when the rule was made or last turned back on, as the
+    /// server writes it (RFC 3339, with or without fractions). Text, read
+    /// through `armedAtDate`: the wire decoder's date strategy throws on a
+    /// whole second, and on a `Date` field that would fail the whole list.
+    let armedAt: String?
+    /// Check-in rules: "once" or "scheduled" (migration 197), read through
+    /// `checkInKind`. Absent on a location rule, and from a backend before it.
+    let checkInMode: String?
+    /// Scheduled rules (`CheckInSchedule`): local weekdays (bit 0 = Monday),
+    /// the deadline and the optional from time in minutes after local
+    /// midnight, the IANA zone, and whether the owner's phone keeps the zone
+    /// at its own (an about-me rule only).
+    let scheduleDays: Int?
+    let scheduleDueMinute: Int?
+    let scheduleFromMinute: Int?
+    let scheduleTz: String?
+    let scheduleTzFollowsPhone: Bool?
+}
+
+/// What kind of check-in rule a row is (`check_in_mode`, migration 197).
+enum CheckInRuleKind: String, Codable, Equatable {
+    /// "Check in within N hours": its timeout after the later of the newest
+    /// check-in and the arming; the server turns it off at the next check-in.
+    case once
+    /// "Check in by a time of day on chosen days" (`CheckInSchedule`).
+    case scheduled
+
+    /// A check-in row's kind: none written is a one-time rule (the rolling rule
+    /// became one, and a backend before migration 197 writes none); nil for a
+    /// kind this version doesn't know.
+    static func of(_ wire: String?) -> CheckInRuleKind? {
+        guard let wire else { return .once }
+        return CheckInRuleKind(rawValue: wire)
+    }
+}
+
+/// What an inactivity alert rule watches (`watches`, migration 196).
+enum InactivityWatch: String, Codable, Equatable {
+    /// Location updates: every rule made before check-in rules.
+    case location
+    /// Check-ins (the Check in button): the rule goes off when its member
+    /// hasn't checked in for the rule's timeout.
+    case checkIn = "check_in"
+
+    /// A row's kind: none written is a location rule (an older backend);
+    /// nil for a kind this version doesn't know, which neither evaluator
+    /// judges.
+    static func of(_ wire: String?) -> InactivityWatch? {
+        guard let wire else { return .location }
+        return InactivityWatch(rawValue: wire)
+    }
+}
+
+extension InactivityAlertResponse {
+    var watchKind: InactivityWatch? { InactivityWatch.of(watches) }
+    /// nil when absent or unreadable: the evaluator then counts from when
+    /// this device first stored the rule.
+    var armedAtDate: Date? { MemberSharingStatus.wireDate(armedAt) }
+    /// A check-in rule's kind; nil on a location rule or a kind this version
+    /// doesn't know.
+    var checkInKind: CheckInRuleKind? { watchKind == .checkIn ? CheckInRuleKind.of(checkInMode) : nil }
+    /// A scheduled rule's schedule; nil on any other, or one that doesn't read.
+    var schedule: CheckInSchedule? {
+        guard checkInKind == .scheduled else { return nil }
+        return CheckInSchedule(days: scheduleDays, dueMinute: scheduleDueMinute, fromMinute: scheduleFromMinute,
+                               timeZone: scheduleTz)
+    }
 }
 
 struct CreateInactivityAlertRequest: Encodable {
@@ -4375,6 +4500,19 @@ struct CreateInactivityAlertRequest: Encodable {
     let notifyOnReturn: Bool
     /// A waiting change's id. Never sent from a plain tap.
     var clientRequestId: String? = nil
+    /// "check_in" for a check-in rule. Nil, and so absent, for a location
+    /// rule, as every older app sends it.
+    var watches: String? = nil
+    /// A check-in rule's kind: "once" or "scheduled" (migration 197). A
+    /// scheduled rule also sends its schedule (`CheckInSchedule`); a from
+    /// time left out counts from the start of the day.
+    var checkInMode: String? = nil
+    var scheduleDays: Int? = nil
+    var scheduleDueMinute: Int? = nil
+    var scheduleFromMinute: Int? = nil
+    var scheduleTz: String? = nil
+    /// About me only: the zone follows this phone's.
+    var scheduleTzFollowsPhone: Bool? = nil
 }
 
 struct UpdateInactivityAlertRequest: Encodable {
@@ -4385,6 +4523,28 @@ struct UpdateInactivityAlertRequest: Encodable {
     let cooldownMinutes: Int?
     let encryptedConditions: EncryptedBlobRequest?
     let notifyOnReturn: Bool?
+    /// A scheduled rule's schedule, each absent when it doesn't change (a
+    /// follow-the-phone update sends only `scheduleTz`).
+    var scheduleDays: Int? = nil
+    var scheduleDueMinute: Int? = nil
+    var scheduleFromMinute: ScheduleFromUpdate? = nil
+    var scheduleTz: String? = nil
+    var scheduleTzFollowsPhone: Bool? = nil
+}
+
+/// A from time to set on a scheduled rule: a minute, or back to the start of
+/// the day, which goes out as an explicit null (left out, it doesn't change).
+enum ScheduleFromUpdate: Encodable, Equatable {
+    case startOfDay
+    case minute(Int)
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .startOfDay: try container.encodeNil()
+        case .minute(let minute): try container.encode(minute)
+        }
+    }
 }
 
 // MARK: - Alert Rules (low-battery)
@@ -4449,6 +4609,30 @@ struct CircleSelfAlertResponse: Codable {
     let circleId: String
     let timeoutHours: Int
     let notifyOnReturn: Bool
+    /// "location" or "check_in": what they asked the circle to watch. Absent
+    /// from an older backend: location. See `InactivityAlertResponse.watches`.
+    let watches: String?
+    /// Check-in requests: when it was made or last turned back on. Text, as
+    /// `InactivityAlertResponse.armedAt`.
+    let armedAt: String?
+    /// As `InactivityAlertResponse`: the kind, and a scheduled request's
+    /// schedule.
+    let checkInMode: String?
+    let scheduleDays: Int?
+    let scheduleDueMinute: Int?
+    let scheduleFromMinute: Int?
+    let scheduleTz: String?
+}
+
+extension CircleSelfAlertResponse {
+    var watchKind: InactivityWatch? { InactivityWatch.of(watches) }
+    var armedAtDate: Date? { MemberSharingStatus.wireDate(armedAt) }
+    var checkInKind: CheckInRuleKind? { watchKind == .checkIn ? CheckInRuleKind.of(checkInMode) : nil }
+    var schedule: CheckInSchedule? {
+        guard checkInKind == .scheduled else { return nil }
+        return CheckInSchedule(days: scheduleDays, dueMinute: scheduleDueMinute, fromMinute: scheduleFromMinute,
+                               timeZone: scheduleTz)
+    }
 }
 
 /// `{"circle_id": "..."}`: the whole of it. Serialises via the encoder's

@@ -313,6 +313,9 @@ extension NotificationResponse {
         case "place_alert_removed": return "mappin.slash"
         case "inactivity_alert": return "figure.walk.motion"
         case "inactivity_recovered": return "figure.walk.motion"
+        // Not the check-in's own hand: an overdue clock, so the two rows don't
+        // read alike at a glance.
+        case "missed_check_in": return "clock.badge.exclamationmark"
         // The raise's row is "sos_alert"; matching only "sos_triggered",
         // which the server does not write, would give it the plain bell.
         case "sos_alert", "sos_triggered", "sos_acknowledged", "sos_resolved": return "exclamationmark.triangle"
@@ -346,6 +349,7 @@ extension NotificationResponse {
         case "check_in": return .purple
         case "circle_invite": return .indigo
         case "inactivity_alert": return .orange
+        case "missed_check_in": return .orange
         case "inactivity_recovered": return .green
         case "destination_shared", "destination_arrival": return .teal
         // Orange, the app's "act on this" colour (inactivity, place exit),

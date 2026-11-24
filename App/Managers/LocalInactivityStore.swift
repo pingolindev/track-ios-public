@@ -18,11 +18,12 @@
 import Foundation
 import Combine
 
-/// A device-local record of client-side inactivity firings. These rules are
+/// A device-local record of client-side inactivity firings, missed check-ins
+/// included (`isMissedCheckIn`). These rules are
 /// client_only (their watcher set is E2EE, so the server can't evaluate or
 /// record them), so a firing would otherwise leave no trace beyond a
 /// transient tray notification. This store persists each firing so it
-/// survives a process restart; the unresolved event doubles as the
+/// survives a process restart: the unresolved event doubles as the
 /// "already fired" marker (fire-once-per-lapse) and feeds the in-app history
 /// + bell. Mirrors the Android app's local_inactivity_events table.
 struct LocalInactivityEvent: Codable, Identifiable, Equatable {
@@ -36,11 +37,29 @@ struct LocalInactivityEvent: Codable, Identifiable, Equatable {
     let memberName: String
     var triggeredAt: Date
     /// nil while the member is still silent (the "already fired" marker);
-    /// set when they share location again. History shows Triggered -> Resolved.
+    /// set when they share location again, or for a missed check-in, check in.
+    /// History shows Triggered -> Resolved.
     var resolvedAt: Date?
     var isRead: Bool
+    /// What the rule watched: "check_in" for a missed check-in. nil for a
+    /// location lapse, and in every event stored before check-in rules.
+    var watches: String? = nil
+    /// A missed check-in's lapse start, as judged when it fired: the later of
+    /// the member's newest check-in and when the rule was armed. A later one (a
+    /// newer check-in, or the rule armed again) ends the lapse
+    /// (`CheckInAlerts.decide`).
+    var lapseSince: Date? = nil
+    /// A missed check-in's rule timeout, for its words.
+    var timeoutHours: Int? = nil
+    /// A missed check-in that ended: true when they checked in after it
+    /// began, false when its rule was turned back on first.
+    var endedByCheckIn: Bool? = nil
+    /// A scheduled rule's deadline (minutes after local midnight), for its
+    /// words: "{name} hasn't checked in by 9:00 PM." nil on a one-time rule's.
+    var dueMinute: Int? = nil
 
     var isResolved: Bool { resolvedAt != nil }
+    var isMissedCheckIn: Bool { watches == InactivityWatch.checkIn.rawValue }
 }
 
 @MainActor
@@ -58,8 +77,14 @@ final class LocalInactivityStore: ObservableObject {
     /// one forms) -> instant.
     private(set) var notSharingSeen: [String: Date] = [:]
 
+    /// When this device first stored each check-in rule it judged without an
+    /// `armed_at` (an older backend's row, or one that didn't read): its clock
+    /// starts there, never earlier. Rule id in its one form -> instant.
+    private(set) var ruleFirstStored: [String: Date] = [:]
+
     private static let cacheKey = "inactivity.localEvents"
     private static let notSharingKey = "inactivity.notSharingSeen"
+    private static let firstStoredKey = "inactivity.ruleFirstStored"
     /// Longer than any timeout (24 h): an older stretch decides nothing.
     nonisolated static let notSharingKeep: TimeInterval = 8 * 24 * 60 * 60
     private static let maxEvents = 50
@@ -79,6 +104,35 @@ final class LocalInactivityStore: ObservableObject {
             let oldest = Date().addingTimeInterval(-Self.notSharingKeep)
             notSharingSeen = seen.filter { $0.value > oldest }
         }
+        if let stored = await CacheStore.shared.load([String: Date].self, forKey: Self.firstStoredKey) {
+            ruleFirstStored = stored
+        }
+    }
+
+    /// When this device first stored `ruleId`, recorded now if it never has.
+    func firstStored(ruleId: String, now: Date = Date()) -> Date {
+        let key = CanonicalId.key(ruleId)
+        if let stored = ruleFirstStored[key] { return stored }
+        ruleFirstStored[key] = now
+        let snapshot = ruleFirstStored
+        Task { await CacheStore.shared.save(snapshot, forKey: Self.firstStoredKey) }
+        return now
+    }
+
+    /// Every open missed check-in lapse: where each started, by
+    /// `CheckInAlerts.lapseKey`. An event with no start stored counts from
+    /// when it fired, so only a check-in after that ends it.
+    /// The missed check-ins still open.
+    var openMissedCheckIns: [LocalInactivityEvent] {
+        events.filter { $0.isMissedCheckIn && !$0.isResolved }
+    }
+
+    var openCheckInLapses: [String: Date] {
+        var open: [String: Date] = [:]
+        for event in events where event.isMissedCheckIn && !event.isResolved {
+            open[CheckInAlerts.lapseKey(ruleId: event.ruleId, userId: event.userId)] = event.lapseSince ?? event.triggeredAt
+        }
+        return open
     }
 
     /// A watched member the roster shows not sharing in `circleId` now.
@@ -144,8 +198,12 @@ final class LocalInactivityStore: ObservableObject {
         events.contains { $0.ruleId == ruleId && $0.userId == userId && $0.resolvedAt == nil }
     }
 
+    /// A firing. A missed check-in also passes `watches` ("check_in"), the
+    /// lapse's start and the rule's timeout, or a scheduled rule's due minute.
     @discardableResult
-    func record(ruleId: String, circleId: String, userId: String, memberName: String, triggeredAt: Date) -> LocalInactivityEvent {
+    func record(ruleId: String, circleId: String, userId: String, memberName: String, triggeredAt: Date,
+                watches: String? = nil, lapseSince: Date? = nil, timeoutHours: Int? = nil,
+                dueMinute: Int? = nil) -> LocalInactivityEvent {
         let event = LocalInactivityEvent(
             id: "local-\(ruleId)-\(userId)-\(Int(triggeredAt.timeIntervalSince1970 * 1000))",
             ruleId: ruleId,
@@ -154,7 +212,11 @@ final class LocalInactivityStore: ObservableObject {
             memberName: memberName,
             triggeredAt: triggeredAt,
             resolvedAt: nil,
-            isRead: false
+            isRead: false,
+            watches: watches,
+            lapseSince: lapseSince,
+            timeoutHours: timeoutHours,
+            dueMinute: dueMinute
         )
         events.insert(event, at: 0)
         if events.count > Self.maxEvents { events = Array(events.prefix(Self.maxEvents)) }
@@ -174,6 +236,20 @@ final class LocalInactivityStore: ObservableObject {
         // ended with no fix is no "sharing location again".
         if let fixAt, !Self.resolvesLapse(triggeredAt: events[idx].triggeredAt, lastFix: fixAt) { return false }
         events[idx].resolvedAt = date
+        persist()
+        return true
+    }
+
+    /// End the open missed check-in for this rule+member, saying how
+    /// (`endedByCheckIn`). Returns true if one was open, so the caller can
+    /// take back its notification.
+    @discardableResult
+    func resolveMissedCheckIn(ruleId: String, userId: String, checkedIn: Bool, at date: Date = Date()) -> Bool {
+        guard let idx = events.firstIndex(where: {
+            $0.isMissedCheckIn && $0.ruleId == ruleId && $0.userId == userId && $0.resolvedAt == nil
+        }) else { return false }
+        events[idx].resolvedAt = date
+        events[idx].endedByCheckIn = checkedIn
         persist()
         return true
     }
@@ -214,9 +290,13 @@ final class LocalInactivityStore: ObservableObject {
     func clear() {
         events = []
         notSharingSeen = [:]
+        ruleFirstStored = [:]
         loaded = false
         persist()
-        Task { await CacheStore.shared.remove(forKey: Self.notSharingKey) }
+        Task {
+            await CacheStore.shared.remove(forKey: Self.notSharingKey)
+            await CacheStore.shared.remove(forKey: Self.firstStoredKey)
+        }
     }
 
     private func persist() {

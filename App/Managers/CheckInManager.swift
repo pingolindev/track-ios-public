@@ -28,6 +28,11 @@ final class CheckInManager: ObservableObject {
 
     @Published private(set) var recentCheckIns: [CheckIn] = []
     @Published private(set) var isLoading = false
+    /// This account's own check-ins per circle (its id in its one form), as
+    /// the server has them: what the countdown on its own check-in rules
+    /// counts from (`CheckInCountdown`). No entry: not read, or the read
+    /// failed, and then no countdown is shown rather than a wrong one.
+    @Published private(set) var myCheckIns: [String: CheckInCountdown.MyCheckIns] = [:]
 
     // MARK: - Dependencies
 
@@ -45,6 +50,7 @@ final class CheckInManager: ObservableObject {
     /// wiped separately by `CacheStore.shared.clearAll()` in logout.
     func reset() {
         recentCheckIns = []
+        myCheckIns = [:]
     }
 
     // MARK: - Check-in Operations
@@ -138,11 +144,16 @@ final class CheckInManager: ObservableObject {
         return checkIn
     }
 
+    /// A check-in the server accepted: sent now, or one that waited and has
+    /// gone out. A check-in queued while this iPhone is behind never comes
+    /// here until it goes out.
     private func remember(_ checkIn: CheckIn) {
         recentCheckIns.insert(checkIn, at: 0)
         if recentCheckIns.count > 50 {
             recentCheckIns = Array(recentCheckIns.prefix(50))
         }
+        // The server has it now: the countdown on my own rules restarts.
+        myCheckIns[CanonicalId.key(checkIn.circleId)]?.accepted(at: checkIn.timestamp)
     }
 
     /// The circle's privacy setting for a position now, as a check-in applies
@@ -339,6 +350,256 @@ final class CheckInManager: ObservableObject {
             cursorId = page.last?.id
         }
         return collected
+    }
+
+    /// Each member's newest check-in in a circle, by their id in its one form:
+    /// what the check-in alert rules judge (`MonitoringManager.evaluateCheckInAlerts`).
+    /// The circle's route, read by `readNewestCheckIns`; `from`: a scheduled
+    /// rule's window start, when the read must reach back that far.
+    func newestCheckIns(circleId: String, from: Date? = nil, now: Date = Date()) async throws -> [String: Date] {
+        let api = self.api
+        return try await Self.readNewestCheckIns(circleId: circleId, now: now, from: from, crypto: cryptoManager) { cursorDayBucket, cursorId in
+            try await api.listCircleCheckIns(
+                circleId: circleId,
+                limit: CheckInAlerts.pageSize,
+                cursorDayBucket: cursorDayBucket,
+                cursorId: cursorId
+            )
+        }
+    }
+
+    /// The read behind `newestCheckIns`, its pages fetched by `fetch` (from a
+    /// cursor: the last row's day bucket and id).
+    ///
+    /// Newest first, page by page until a page comes back short, reaches a day
+    /// older than any rule needs, or 5 pages (`CheckInAlerts.readsOn`). THROWS,
+    /// never a partial answer, when a page fails or when a check-in inside the
+    /// window doesn't open here (`openPage`): a failed read is not "no
+    /// check-in", and nobody in the circle is judged on it. "Nobody has checked
+    /// in" is an empty answer that succeeded. A row that never opens (a key this
+    /// phone will never hold, a damaged row) pauses the circle's check-in rules
+    /// until it falls out of the window, about a day: late rather than false.
+    /// `from` reaches the window further back (a scheduled rule's window
+    /// start, up to a week for a weekly pattern). Nonisolated, so the opening
+    /// runs off the Main actor.
+    nonisolated static func readNewestCheckIns(
+        circleId: String,
+        now: Date,
+        from: Date? = nil,
+        crypto: CryptoManager,
+        fetch: (_ cursorDayBucket: Int?, _ cursorId: String?) async throws -> [CheckInResponse]
+    ) async throws -> [String: Date] {
+        let floor = CheckInAlerts.readFloorDayBucket(now: now, from: from)
+        var newest: [String: Date] = [:]
+        var cursorDayBucket: Int?
+        var cursorId: String?
+        for _ in 0..<CheckInAlerts.maxPages {
+            let page = try await fetch(cursorDayBucket, cursorId)
+            CheckInAlerts.merge(try openPage(page, circleId: circleId, crypto: crypto, floor: floor),
+                                into: &newest, now: now)
+            guard CheckInAlerts.readsOn(pageDayBuckets: page.map(\.dayBucket), floor: floor),
+                  let last = page.last else { break }
+            cursorDayBucket = last.dayBucket
+            cursorId = last.id
+        }
+        return newest
+    }
+
+    /// One page of the read, opened. A row inside the window (its day bucket at
+    /// or past `floor`) whose sender or sealed time doesn't open fails the read
+    /// (`CheckInAlerts.UnopenedCheckIn`): it may be exactly the check-in that
+    /// matters, sealed under a key this phone doesn't hold yet, and the
+    /// location passes hold their alerts to the same rule (`isComplete`). One
+    /// below the window is skipped: no rule's verdict turns on it. A message or
+    /// a position that doesn't open changes nothing here.
+    nonisolated static func openPage(
+        _ page: [CheckInResponse], circleId: String, crypto: CryptoManager, floor: Int
+    ) throws -> [CheckIn] {
+        var opened: [CheckIn] = []
+        for response in page {
+            if let checkIn = openCheckIn(response, circleId: circleId, crypto: crypto)?.checkIn,
+               !checkIn.userId.isEmpty {
+                opened.append(checkIn)
+            } else if response.dayBucket >= floor {
+                throw CheckInAlerts.UnopenedCheckIn()
+            }
+        }
+        return opened
+    }
+
+    // MARK: - My own check-ins, for the countdown
+
+    /// Read this account's own check-ins again for every circle where one of
+    /// its rules counts down (`CheckInCountdown.reads`), or only `circleId`'s.
+    /// For a screen that shows a countdown, as it opens.
+    func refreshMyCheckIns(for alerts: [InactivityAlertResponse], circleId: String? = nil) async {
+        for (key, read) in CheckInCountdown.reads(for: alerts)
+        where circleId.map({ CanonicalId.key($0) == key }) ?? true {
+            await refreshMyCheckIns(circleId: read.circleId, sinceDay: read.sinceDay)
+        }
+    }
+
+    /// Read this account's newest check-in in `circleId` from the server, back
+    /// to `sinceDay`. A read that fails leaves no entry: no countdown rather
+    /// than a wrong one.
+    func refreshMyCheckIns(circleId: String, sinceDay: Int) async {
+        let key = CanonicalId.key(circleId)
+        guard let me = AuthManager.shared.userId else {
+            myCheckIns.removeValue(forKey: key)
+            return
+        }
+        let api = self.api
+        do {
+            let read = try await Self.readMyNewestCheckIn(
+                circleId: circleId, userId: me, sinceDay: sinceDay, now: Date(), crypto: cryptoManager
+            ) { cursorDayBucket, cursorId in
+                try await api.listCircleCheckIns(
+                    circleId: circleId,
+                    limit: CheckInAlerts.pageSize,
+                    cursorDayBucket: cursorDayBucket,
+                    cursorId: cursorId
+                )
+            }
+            // One accepted while the read was out may be newer than it saw.
+            let held = myCheckIns[key]?.newest
+            myCheckIns[key] = CheckInCountdown.MyCheckIns(newest: [read, held].compactMap { $0 }.max(),
+                                                         sinceDay: sinceDay)
+        } catch {
+            myCheckIns.removeValue(forKey: key)
+        }
+    }
+
+    /// This account's newest check-in in a circle that the server has, from
+    /// `sinceDay` on (a rule's arming day: an older check-in moves no
+    /// deadline), its pages fetched by `fetch`. Not the alert rules' read
+    /// (`readNewestCheckIns`): that one stops a day back, and an overdue
+    /// countdown may count from a check-in older than that.
+    ///
+    /// Newest day first, page by page, until it knows: a page comes back
+    /// short, or it has read past `sinceDay`, or past the day of the newest
+    /// of its own it found (rows within a day aren't in time order, so that
+    /// day is read to its end). nil: none from `sinceDay` on. THROWS when it
+    /// can't tell (`CheckInCountdown.CannotTell`): a page failed, a row that
+    /// may be newer than what it found didn't open, or it ran out of pages
+    /// first. A check-in dated further ahead than any clock may be is left
+    /// out, as the alert rules leave it out (`CheckInAlerts.merge`).
+    nonisolated static func readMyNewestCheckIn(
+        circleId: String,
+        userId: String,
+        sinceDay: Int,
+        now: Date,
+        crypto: CryptoManager,
+        fetch: (_ cursorDayBucket: Int?, _ cursorId: String?) async throws -> [CheckInResponse]
+    ) async throws -> Date? {
+        let me = CanonicalId.key(userId)
+        let latestBelievable = now.addingTimeInterval(TimeInterval(CircleManager.maxFutureSkewMs) / 1000)
+        var newest: Date?
+        var newestDay: Int?
+        var cursorDayBucket: Int?
+        var cursorId: String?
+        for _ in 0..<CheckInCountdown.maxPages {
+            let page = try await fetch(cursorDayBucket, cursorId)
+            for response in page {
+                guard let checkIn = openCheckIn(response, circleId: circleId, crypto: crypto)?.checkIn,
+                      !checkIn.userId.isEmpty else {
+                    // It may be mine, and newer than what was found.
+                    if response.dayBucket >= (newestDay ?? sinceDay) { throw CheckInCountdown.CannotTell() }
+                    continue
+                }
+                guard CanonicalId.key(checkIn.userId) == me, checkIn.timestamp <= latestBelievable else { continue }
+                newest = max(newest ?? checkIn.timestamp, checkIn.timestamp)
+                newestDay = max(newestDay ?? response.dayBucket, response.dayBucket)
+            }
+            guard page.count >= CheckInAlerts.pageSize, let last = page.last else { return newest }
+            if last.dayBucket < (newestDay ?? sinceDay) { return newest }
+            cursorDayBucket = last.dayBucket
+            cursorId = last.id
+        }
+        throw CheckInCountdown.CannotTell()
+    }
+
+    // MARK: - Past check-ins, for the Alerts history
+
+    /// The past check-ins the Alerts history lists (`CheckInHistory`): the
+    /// last 30 days of the people this account's check-in rules are about,
+    /// read from the server now. `complete` is false when some couldn't be
+    /// read (a circle's page, or the circle-mates' requests); what could is
+    /// still returned.
+    func historyCheckIns(rules: [InactivityAlertResponse]) async -> (entries: [CheckInHistory.Entry], complete: Bool) {
+        let me = AuthManager.shared.userId
+        let circleManager = CircleManager.shared
+        let inactivity = InactivityAlertsManager.shared
+        var complete = true
+        let requests: [CircleSelfAlertResponse]
+        do {
+            requests = try await api.listCircleSelfAlerts()
+        } catch {
+            requests = []
+            complete = false
+        }
+        let watched = CheckInHistory.watched(rules: rules, requests: requests, selfId: me) { rule in
+            guard let spec = inactivity.watchSpec(for: rule) else { return nil }
+            if spec == "all" || spec.isEmpty {
+                return (circleManager.members[rule.circleId] ?? []).map { $0.userId }
+            }
+            return spec.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        }
+        var read: [CheckIn] = []
+        let api = self.api
+        for circle in watched.values {
+            let circleId = circle.circleId
+            do {
+                read += try await Self.readHistoryCheckIns(circleId: circleId, now: Date(), crypto: cryptoManager) {
+                    cursorDayBucket, cursorId in
+                    try await api.listCircleCheckIns(
+                        circleId: circleId,
+                        limit: CheckInAlerts.pageSize,
+                        cursorDayBucket: cursorDayBucket,
+                        cursorId: cursorId
+                    )
+                }
+            } catch {
+                complete = false
+            }
+        }
+        let entries = CheckInHistory.entries(read, watched: watched, selfId: me) { circleId, userId in
+            circleManager.members[circleId]?.first { CanonicalId.sameKey($0.userId, userId) }?.displayName
+        }
+        return (entries, complete)
+    }
+
+    /// One circle's check-ins of the last 30 days that open here, for the
+    /// Alerts history, its pages fetched by `fetch`. Newest first, until a
+    /// page comes back short, reaches a day older than that, or 5 pages. A row
+    /// that doesn't open is skipped: the history shows what this phone can
+    /// read and judges nothing. So is one dated further ahead than any clock
+    /// may be. THROWS when a page fails.
+    nonisolated static func readHistoryCheckIns(
+        circleId: String,
+        now: Date,
+        crypto: CryptoManager,
+        fetch: (_ cursorDayBucket: Int?, _ cursorId: String?) async throws -> [CheckInResponse]
+    ) async throws -> [CheckIn] {
+        let oldest = now.addingTimeInterval(-CheckInHistory.depth)
+        let latestBelievable = now.addingTimeInterval(TimeInterval(CircleManager.maxFutureSkewMs) / 1000)
+        let floor = CheckInCountdown.dayBucket(oldest)
+        var found: [CheckIn] = []
+        var cursorDayBucket: Int?
+        var cursorId: String?
+        for _ in 0..<CheckInHistory.maxPages {
+            let page = try await fetch(cursorDayBucket, cursorId)
+            for response in page {
+                guard let checkIn = openCheckIn(response, circleId: circleId, crypto: crypto)?.checkIn,
+                      !checkIn.userId.isEmpty, checkIn.timestamp >= oldest,
+                      checkIn.timestamp <= latestBelievable else { continue }
+                found.append(checkIn)
+            }
+            guard CheckInAlerts.readsOn(pageDayBuckets: page.map(\.dayBucket), floor: floor),
+                  let last = page.last else { break }
+            cursorDayBucket = last.dayBucket
+            cursorId = last.id
+        }
+        return found
     }
 
     /// Build the E2EE CreateCheckInRequest, POST it, and assemble a CheckIn
